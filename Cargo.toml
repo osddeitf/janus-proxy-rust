@@ -1,0 +1,14 @@
+[package]
+name = "janus-proxy"
+version = "0.1.0"
+authors = ["thanhdc <thanhdc@ql6625.fr>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+hyper = "0.13"
+tokio = { version = "0.2.22", features = ["full"] }
+tokio-tungstenite = "0.11.0"
+warp = "0.2.5"
+futures = "0.3.5"
