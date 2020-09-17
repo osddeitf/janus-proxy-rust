@@ -1,9 +1,8 @@
 use serde_json::error::Category;
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 use self::JanusErrorCode::*;
 
-#[derive(Serialize)]
-#[serde(untagged)]
+#[derive(Clone, Copy)]
 pub enum JanusErrorCode {
     /* Unauthorized (can only happen when using apisecret/auth token) */
     JANUS_ERROR_UNAUTHORIZED = 403,
@@ -55,6 +54,13 @@ pub enum JanusErrorCode {
     JANUS_ERROR_WEBRTC_STATE = 471,
     /* The server is currently configured not to accept new sessions */
     JANUS_ERROR_NOT_ACCEPTING_SESSIONS = 472
+}
+
+impl Serialize for JanusErrorCode {
+    fn serialize<S>(&self, serializer: S) -> Result<<S as Serializer>::Ok, <S as Serializer>::Error>
+    where S: Serializer {
+        serializer.serialize_i32((*self) as i32)
+    }
 }
 
 #[derive(Serialize)]
