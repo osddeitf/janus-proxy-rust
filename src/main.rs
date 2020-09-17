@@ -1,13 +1,8 @@
-use tokio::net::{TcpListener, TcpStream};
 use std::net::SocketAddr;
-use futures::{StreamExt, SinkExt};
-use std::io::Bytes;
-use tokio_tungstenite::tungstenite;
-use tokio_tungstenite::tungstenite::handshake::server::{Response, Request, ErrorResponse, create_response};
-use std::borrow::BorrowMut;
+use tokio::net::{TcpListener, TcpStream};
+use tokio_tungstenite::accept_hdr_async;
+use tokio_tungstenite::tungstenite::handshake::server::{Response, Request, ErrorResponse, Callback};
 use janus_proxy::janus;
-use tokio_tungstenite::tungstenite::Message;
-use http::StatusCode;
 
 struct WithProtocolHeader<'a> {
     protocol: &'a str
@@ -19,8 +14,8 @@ impl<'a> WithProtocolHeader<'a> {
     }
 }
 
-impl<'a> tungstenite::handshake::server::Callback for WithProtocolHeader<'a> {
-    fn on_request(self, request: &Request, mut response: Response) -> Result<Response, ErrorResponse> {
+impl<'a> Callback for WithProtocolHeader<'a> {
+    fn on_request(self, _request: &Request, mut response: Response) -> Result<Response, ErrorResponse> {
         response.headers_mut()
             .append("Sec-WebSocket-Protocol", self.protocol.parse().unwrap());
         return Ok(response);
@@ -29,7 +24,7 @@ impl<'a> tungstenite::handshake::server::Callback for WithProtocolHeader<'a> {
 
 async fn handle_connection(stream: TcpStream, _addr: SocketAddr) {
 
-    let ws_stream = match tokio_tungstenite::accept_hdr_async(stream, WithProtocolHeader::new("janus-protocol")).await {
+    let ws_stream = match accept_hdr_async(stream, WithProtocolHeader::new("janus-protocol")).await {
         Ok(x) => x,
         Err(err) => {
             println!("Websocket connection failed: {}", err);
@@ -37,41 +32,9 @@ async fn handle_connection(stream: TcpStream, _addr: SocketAddr) {
         }
     };
 
-    let (mut tx, rx) = ws_stream.split();
-
-    let janus_request = Request::builder()
-        .uri("ws://localhost:8188")
-        .method("GET")
-        .header("Sec-WebSocket-Protocol", "janus-protocol")
-        .body(())
-        .unwrap();
-
-    let (janus_stream, _) = match tokio_tungstenite::connect_async(janus_request).await {
-        Ok(x) => x,
-        Err(err) => {
-            println!("Cannot connect to Janus server: {}", err);
-            return
-        }
-    };
-
-
-    let (jtx, jrx) = janus_stream.split();
-
-    let janus = janus::Janus::new();
-    futures::future::select(
-        // rx.forward(jtx),
-        rx.map(|item| {
-            match item {
-                Ok(message) => match &message {
-                    Message::Text(data) => janus.handle_incoming(data),
-                    _ => Ok(message)
-                }
-                x => x
-            }
-        })
-            .forward(jtx),
-        jrx.forward(tx)
-    ).await;
+    let server = "ws://localhost:8188"
+    let janus = janus::Janus::new(server);
+    janus.handle(ws_stream).await;
     println!("Websocket connection closed");
 }
 

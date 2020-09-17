@@ -1,10 +1,11 @@
 use serde::{Serialize, Deserialize};
-use super::error::JsonError;
+use crate::janus::error::JanusError;
+use super::json;
 
 pub trait Plugin {
-    fn handle(&self, message: &PluginMessage) -> Result<String, JsonError> {
+    fn handle(&self, message: &PluginMessage) -> Result<String, JanusError> {
         println!("Data: {}", message.body);
-        return serde_json::to_string(message).map_err(JsonError::SerialError);
+        json::stringify(&message.body)
     }
 }
 
