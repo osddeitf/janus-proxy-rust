@@ -7,7 +7,13 @@ pub struct IncomingRequestParameters {
 	pub transaction: JSON_STRING,	// JANUS_JSON_PARAM_REQUIRED
 	pub janus: JSON_STRING,				// JANUS_JSON_PARAM_REQUIRED
 	#[serde(default, skip_serializing_if = "is_zero")]
-	pub id: JSON_POSITIVE_INTEGER
+	pub id: JSON_POSITIVE_INTEGER,
+
+	/** Additional (unofficial) parameters */
+	#[serde(default, skip_serializing_if = "is_zero")]
+	pub session_id: JSON_POSITIVE_INTEGER,
+	#[serde(default, skip_serializing_if = "is_zero")]
+	pub handle_id: JSON_POSITIVE_INTEGER
 }
 
 #[skip_serializing_none]
@@ -168,19 +174,4 @@ pub struct TestStunParameters {
 	pub address: JSON_STRING, // JANUS_JSON_PARAM_REQUIRED
 	pub port: JSON_POSITIVE_INTEGER, // JANUS_JSON_PARAM_REQUIRED
 	pub localport: JSON_POSITIVE_INTEGER,
-}
-
-
-/** Additional (unofficial) parameters */
-#[skip_serializing_none]
-#[derive(Serialize, Deserialize)]
-pub struct WebsocketSessionId {
-	#[serde(default, skip_serializing_if = "is_zero")]
-	pub session_id: JSON_POSITIVE_INTEGER
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct WebsocketHandleId {
-	#[serde(default, skip_serializing_if = "is_zero")]
-	pub handle_id: JSON_POSITIVE_INTEGER
 }

@@ -1,6 +1,7 @@
 use serde::Serialize;
 use serde_with::skip_serializing_none;
-use super::json::*;
+use super::json::{self, *};
+use super::error::JanusError;
 use super::request::IncomingRequestParameters;
 
 #[skip_serializing_none]
@@ -26,16 +27,29 @@ pub struct JanusResponse<'a> {
     jsep: Option<JSON_OBJECT>
 }
 
+type JanusRequest = IncomingRequestParameters;
+
 impl<'a> JanusResponse<'a> {
-    pub fn new_response_with_data(name: &'a str, request: &'a IncomingRequestParameters, data: JSON_OBJECT) -> JanusResponse<'a> {
+    pub fn new_with_data(name: &'a str, request: &'a JanusRequest, data: JSON_OBJECT) -> JanusResponse<'a> {
+        let mut response = Self::new(name, request);
+        response.data = Some(data);
+        response
+    }
+
+    pub fn new(name: &'a str, request: &'a JanusRequest) -> JanusResponse<'a> {
+        // TODO: is `session_id` and `sender` returned from request
         JanusResponse {
             janus: name,
             transaction: &request.transaction,
-            session_id: 0,
-            sender: 0,
-            data: Some(data),
+            session_id: request.session_id,
+            sender: request.handle_id,
+            data: None,
             plugin_data: None,
             jsep: None
         }
+    }
+
+    pub fn stringify(&self) -> Result<String, JanusError> {
+        json::stringify(self)
     }
 }

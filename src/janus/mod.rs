@@ -63,23 +63,35 @@ impl<'a> Janus<'a> {
 
     async fn handle_request(&self, text: String) -> Result<String, JanusError> {
         let request: IncomingRequestParameters = json::parse(&text)?;
-        let session_id = json::parse::<WebsocketSessionId>(&text).map(|x| x.session_id)?;
-        let handle_id = json::parse::<WebsocketHandleId>(&text).map(|x| x.handle_id)?;
+
+        let message_text = &request.janus[..];
+        let session_id = request.session_id;
+        let handle_id = request.handle_id;
 
         if session_id == 0 && handle_id == 0 {
-            return match &request.janus[..] {
-                "ping" => Ok("".to_string()),
-                "info" => Ok("".to_string()),
+            return match message_text {
+                "ping" => JanusResponse::new("pong", &request).stringify(),
+                "info" => JanusResponse::new_with_data("server_info", &request, json!({})).stringify(), // TODO: response server info
                 "create" => self.create_session(&request).await,
                 x => Err(
-                    JanusError::new(JANUS_ERROR_INVALID_REQUEST_PATH, format!("Unhandled request {}", x))
+                    JanusError::new(JANUS_ERROR_INVALID_REQUEST_PATH, format!("Unhandled request '{}' at this path", x))
                 )
             }
         }
 
-        println!("{} {}", handle_id, session_id);
-
-        json::stringify(&request)
+        return match message_text {
+            "keepalive" => JanusResponse::new("ack", &request).stringify(),
+            // "attach" => (),
+            // "destroy" => (),
+            // "detach" => (),
+            // "hangup" => (),
+            // "claim" => (),
+            // "message" => (),
+            // "trickle" => (),
+            x => Err(
+                JanusError::new(JANUS_ERROR_UNKNOWN_REQUEST, format!("Unknown quest '{}'", x))
+            )
+        }
     }
 
     async fn create_session(&self, request: &IncomingRequestParameters) -> Result<String, JanusError> {
@@ -87,8 +99,7 @@ impl<'a> Janus<'a> {
 
         let id: u64 = 19213907;     // mock
         let data = json!({ "id": id });
-        let response = JanusResponse::new_response_with_data("success", request, data);
-        json::stringify(&response)
+        JanusResponse::new_with_data("success", request, data).stringify()
     }
 
     async fn new_janus_connection(&self) -> Result<WebSocketStream<TcpStream>, tungstenite::Error> {
