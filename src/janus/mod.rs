@@ -50,10 +50,7 @@ impl<'a> Janus<'a> {
 
     async fn handle_websocket(&self, item: Result<tungstenite::Message, tungstenite::Error>) -> Result<Message, Error> {
         if let Ok(tungstenite::Message::Text(data)) = item {
-            let message = match self.handle_request(data).await {
-                Ok(response) => response,
-                Err(janus_error) => json::stringify(&janus_error).ok().unwrap(),
-            };
+            let message = self.handle_request(data).await;
             Ok(Message::Text(message))
         }
         else {
@@ -61,15 +58,18 @@ impl<'a> Janus<'a> {
         }
     }
 
-    async fn handle_request(&self, text: String) -> Result<String, JanusError> {
-        let request: IncomingRequestParameters = json::parse(&text)?;
+    async fn handle_request(&self, text: String) -> String {
+        let request: IncomingRequestParameters = match json::parse(&text) {
+            Ok(x) => x,
+            Err(e) => return JanusResponse::bad_request(&e).stringify().ok().unwrap()
+        };
 
         let message_text = &request.janus[..];
         let session_id = request.session_id;
         let handle_id = request.handle_id;
 
-        if session_id == 0 && handle_id == 0 {
-            return match message_text {
+        let response = if session_id == 0 && handle_id == 0 {
+            match message_text {
                 "ping" => JanusResponse::new("pong", &request).stringify(),
                 "info" => JanusResponse::new_with_data("server_info", &request, json!({})).stringify(), // TODO: response server info
                 "create" => self.create_session(&request).await,
@@ -78,19 +78,26 @@ impl<'a> Janus<'a> {
                 )
             }
         }
+        else {
+            match message_text {
+                "keepalive" => JanusResponse::new("ack", &request).stringify(),
+                // "attach" => (),
+                // "destroy" => (),
+                // "detach" => (),
+                // "hangup" => (),
+                // "claim" => (),
+                // "message" => (),
+                // "trickle" => (),
+                x => Err(
+                    JanusError::new(JANUS_ERROR_UNKNOWN_REQUEST, format!("Unknown quest '{}'", x))
+                )
+            }
+        };
 
-        return match message_text {
-            "keepalive" => JanusResponse::new("ack", &request).stringify(),
-            // "attach" => (),
-            // "destroy" => (),
-            // "detach" => (),
-            // "hangup" => (),
-            // "claim" => (),
-            // "message" => (),
-            // "trickle" => (),
-            x => Err(
-                JanusError::new(JANUS_ERROR_UNKNOWN_REQUEST, format!("Unknown quest '{}'", x))
-            )
+        // TODO: handle some unexpected error due to `unwrap()`
+        match response {
+            Err(e) => JanusResponse::new_with_error(&request, &e).stringify().ok().unwrap(),
+            Ok(x) => x
         }
     }
 

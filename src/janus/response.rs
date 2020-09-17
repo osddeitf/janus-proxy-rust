@@ -9,6 +9,7 @@ use super::request::IncomingRequestParameters;
 pub struct JanusResponse<'a> {
     janus: JSON_STRING_SLICE<'a>,
     transaction: JSON_STRING_SLICE<'a>,
+    error: Option<&'a JanusError>,
 
     /** session_id (websocket) */
     #[serde(default, skip_serializing_if = "is_zero")]
@@ -41,8 +42,29 @@ impl<'a> JanusResponse<'a> {
         JanusResponse {
             janus: name,
             transaction: &request.transaction,
+            error: None,
             session_id: request.session_id,
             sender: request.handle_id,
+            data: None,
+            plugin_data: None,
+            jsep: None
+        }
+    }
+
+    // TODO: whether `JanusRequest` and `JanusError` or not should have the same lifetime parameter
+    pub fn new_with_error(request: &'a JanusRequest, error: &'a JanusError) -> JanusResponse<'a> {
+        let mut response = Self::new("error", request);
+        response.error = Some(error);
+        response
+    }
+
+    pub fn bad_request(error: &JanusError) -> JanusResponse {
+        JanusResponse {
+            janus: "error",
+            transaction: "",
+            error: Some(error),
+            session_id: 0,
+            sender: 0,
             data: None,
             plugin_data: None,
             jsep: None
