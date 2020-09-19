@@ -7,10 +7,6 @@ mod response;
 pub mod state;
 mod connection;
 
-use tokio_tungstenite::WebSocketStream;
-use tokio_tungstenite::tungstenite;
-use http::{Request};
-
 /**
 * Request types are ported from janus-gateway v0.10.5
 */
@@ -21,22 +17,22 @@ use self::response::*;
 use self::error::{JanusError, JanusErrorCode::*};
 use self::state::SharedStateProvider;
 use self::connection::accept_ws;
-use tokio::net::TcpStream;
 use futures::{StreamExt, SinkExt};
+use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::{Message, Error};
 use serde_json::json;
 
 pub struct Janus<'a> {
-    janus_server: &'a str,
-    videoroom: VideoRoom,
+    _janus_server: &'a str,
+    _videoroom: VideoRoom,
     store: Box<dyn SharedStateProvider>
 }
 
 impl<'a> Janus<'a> {
     pub fn new(server: &'a str, store: Box<dyn SharedStateProvider>) -> Janus<'a> {
         Janus {
-            janus_server: server,
-            videoroom: VideoRoom,
+            _janus_server: server,
+            _videoroom: VideoRoom,
             store
         }
     }
@@ -55,8 +51,8 @@ impl<'a> Janus<'a> {
         }
     }
 
-    async fn handle_websocket(&self, item: Result<tungstenite::Message, tungstenite::Error>) -> Result<Message, Error> {
-        if let Ok(tungstenite::Message::Text(data)) = item {
+    async fn handle_websocket(&self, item: Result<Message, Error>) -> Result<Message, Error> {
+        if let Ok(Message::Text(data)) = item {
             let message = self.handle_request(data).await;
             Ok(Message::Text(message))
         }
@@ -111,20 +107,8 @@ impl<'a> Janus<'a> {
     async fn create_session(&self, request: &IncomingRequestParameters) -> Result<String, JanusError> {
         // TODO: `apisecret`, `token` authentication?
 
-        let id: u64 = self.store.new_session_id();
+        let id = self.store.new_session_id();
         let data = json!({ "id": id });
         JanusResponse::new_with_data("success", request, data).stringify()
-    }
-
-    async fn new_janus_connection(&self) -> Result<WebSocketStream<TcpStream>, tungstenite::Error> {
-        let janus_request = Request::builder()
-            .uri(self.janus_server)
-            .method("GET")
-            .header("Sec-WebSocket-Protocol", "janus-protocol")
-            .body(())
-            .unwrap();
-
-        let (janus_stream, _) = tokio_tungstenite::connect_async(janus_request).await?;
-        return Ok(janus_stream);
     }
 }

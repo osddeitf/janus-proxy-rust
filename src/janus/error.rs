@@ -3,6 +3,7 @@ use serde::{Serialize, Serializer};
 use self::JanusErrorCode::*;
 
 #[derive(Clone, Copy)]
+#[allow(non_camel_case_types, dead_code)]
 pub enum JanusErrorCode {
     /* Unauthorized (can only happen when using apisecret/auth token) */
     JANUS_ERROR_UNAUTHORIZED = 403,
