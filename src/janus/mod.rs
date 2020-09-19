@@ -105,7 +105,7 @@ impl<'a> Janus<'a> {
             if handle_id == 0 {
                 match message_text {
                     "attach" => self.create_handle(&request, &json::parse(&text)?).await,
-                    // "destroy" => (),
+                    "destroy" => self.destroy_session(&request).await,
                     "detach" | "hangup" | "message" | "trickle" => Err(
                         JanusError::new(JANUS_ERROR_INVALID_REQUEST_PATH, format!("Unhandled request '{}' at this path", message_text))
                     ),
@@ -144,6 +144,13 @@ impl<'a> Janus<'a> {
         let id = self.store.new_session_id();
         let data = json!({ "id": id });
         JanusResponse::new_with_data("success", request, data).stringify()
+    }
+
+    async fn destroy_session(&self, request: &IncomingRequestParameters) -> Result<String, JanusError> {
+        //TODO: Clean-up, should close websocket connection?
+        self.store.destroy_session(&request.session_id);
+        //TODO: notify event handlers. Btw, what is 'event handler'
+        JanusResponse::new("success", &request).stringify()
     }
 
     async fn create_handle(&self, request: &IncomingRequestParameters, attach_params: &AttachParameters) -> Result<String, JanusError>{
