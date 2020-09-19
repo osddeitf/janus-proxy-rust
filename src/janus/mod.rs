@@ -122,7 +122,7 @@ impl<'a> Janus<'a> {
                 // TODO: is there any request not return handle_id?
                 match message_text {
                     "detach" => self.detach_plugin(&request).await,
-                    // "hangup" => (),
+                    "hangup" => self.hangup_plugin(&request).await,
                     // "message" => (),
                     // "trickle" => (),
                     "attach" | "destroy" => Err(
@@ -170,6 +170,11 @@ impl<'a> Janus<'a> {
     async fn detach_plugin(&self, request: &IncomingRequestParameters) -> Result<String, JanusError> {
         // TODO: clean-up
         self.store.destroy_handle(&request.handle_id);
+        JanusResponse::new("success", &request).stringify()
+    }
+
+    async fn hangup_plugin(&self, request: &IncomingRequestParameters) -> Result<String, JanusError> {
+        // TODO: do real hangup
         JanusResponse::new("success", &request).stringify()
     }
 }
