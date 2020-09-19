@@ -71,8 +71,9 @@ impl<'a> Janus<'a> {
         let session_id = request.session_id;
         let handle_id = request.handle_id;
 
-        let response = if session_id == 0 && handle_id == 0 {
-            match message_text {
+        let response = async {
+            if session_id == 0 && handle_id == 0 {
+                return match message_text {
                 "ping" => JanusResponse::new("pong", &request).stringify(),
                 "info" => JanusResponse::new_with_data("server_info", &request, json!({})).stringify(), // TODO: response server info
                 "create" => self.create_session(&request).await,
@@ -81,27 +82,57 @@ impl<'a> Janus<'a> {
                 )
             }
         }
-        else {
+
+            if session_id == 0 {
+                return Err(JanusError::new(JANUS_ERROR_SESSION_NOT_FOUND, format!("Invalid session")))
+            }
+
+            let session = self.store.find_session(&session_id);
+            if !session {
+                return Err(JanusError::new(JANUS_ERROR_SESSION_NOT_FOUND, format!("No such session \"{}\"", session_id)))
+            }
+
+            /* Both session-level and handle-level request */
+            if message_text == "keepalive" {
+                return JanusResponse::new("ack", &request).stringify()
+            }
+            // if message_text == "claim" {}    //TODO: handle later
+
+            /* Session-level request */
+            if handle_id == 0 {
             match message_text {
-                "keepalive" => JanusResponse::new("ack", &request).stringify(),
                 // "attach" => (),
                 // "destroy" => (),
+                    "detach" | "hangup" | "message" | "trickle" => Err(
+                        JanusError::new(JANUS_ERROR_INVALID_REQUEST_PATH, format!("Unhandled request '{}' at this path", message_text))
+                    ),
+                    x => Err(JanusError::new(JANUS_ERROR_UNKNOWN_REQUEST, format!("Unknown request '{}'", x)))
+                }
+            }
+            else {
+                /* Handle-level request */
+                let handle = self.store.find_handle(&handle_id);
+                if !handle {
+                    return Err(JanusError::new(JANUS_ERROR_HANDLE_NOT_FOUND, format!("No such handle \"{}\" in session \"{}\"", handle_id, session_id)))
+                }
+
+                match message_text {
                 // "detach" => (),
                 // "hangup" => (),
-                // "claim" => (),
                 // "message" => (),
                 // "trickle" => (),
-                x => Err(
-                    JanusError::new(JANUS_ERROR_UNKNOWN_REQUEST, format!("Unknown quest '{}'", x))
-                )
+                    "attach" | "destroy" => Err(
+                        JanusError::new(JANUS_ERROR_INVALID_REQUEST_PATH, format!("Unhandled request '{}' at this path", message_text))
+                    ),
+                    x => Err(JanusError::new(JANUS_ERROR_UNKNOWN_REQUEST, format!("Unknown request '{}'", x)))
+                }
             }
         };
 
         // TODO: handle some unexpected error due to `unwrap()`
-        match response {
-            Err(e) => JanusResponse::new_with_error(&request, &e).stringify().ok().unwrap(),
-            Ok(x) => x
-        }
+        response.await.unwrap_or_else(|e| {
+            JanusResponse::new_with_error(&request, &e).stringify().ok().unwrap()
+        })
     }
 
     async fn create_session(&self, request: &IncomingRequestParameters) -> Result<String, JanusError> {
