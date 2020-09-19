@@ -4,6 +4,8 @@ mod videoroom;
 mod json;
 mod request;
 mod response;
+pub mod state;
+mod connection;
 
 use tokio_tungstenite::WebSocketStream;
 use tokio_tungstenite::tungstenite;
@@ -12,30 +14,35 @@ use http::{Request};
 /**
 * Request types are ported from janus-gateway v0.10.5
 */
+
 use self::videoroom::VideoRoom;
 use self::request::*;
 use self::response::*;
 use self::error::{JanusError, JanusErrorCode::*};
+use self::state::SharedStateProvider;
+use self::connection::accept_ws;
 use tokio::net::TcpStream;
 use futures::{StreamExt, SinkExt};
 use tokio_tungstenite::tungstenite::{Message, Error};
-use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 pub struct Janus<'a> {
     janus_server: &'a str,
-    videoroom: VideoRoom
+    videoroom: VideoRoom,
+    store: Box<dyn SharedStateProvider>
 }
 
 impl<'a> Janus<'a> {
-    pub fn new(server: &str) -> Janus {
+    pub fn new(server: &'a str, store: Box<dyn SharedStateProvider>) -> Janus<'a> {
         Janus {
             janus_server: server,
             videoroom: VideoRoom,
+            store
         }
     }
 
-    pub async fn handle(&self, ws: WebSocketStream<TcpStream>) {
+    pub async fn accept(&self, stream: TcpStream) {
+        let ws = accept_ws(stream).await.unwrap();
         let (mut tx, mut rx) = ws.split();
         // rx
         //     .map(|item| self.handle_websocket(item))
@@ -44,7 +51,7 @@ impl<'a> Janus<'a> {
         //     .await;
         while let Some(item) = rx.next().await {
             let response = self.handle_websocket(item).await;
-            tx.send(response.unwrap()).await.unwrap();
+            tx.send(response.unwrap()).await.unwrap();      //TODO: handle `tx` closed
         }
     }
 
@@ -104,7 +111,7 @@ impl<'a> Janus<'a> {
     async fn create_session(&self, request: &IncomingRequestParameters) -> Result<String, JanusError> {
         // TODO: `apisecret`, `token` authentication?
 
-        let id: u64 = 19213907;     // mock
+        let id: u64 = self.store.new_session_id();
         let data = json!({ "id": id });
         JanusResponse::new_with_data("success", request, data).stringify()
     }
