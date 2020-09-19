@@ -13,6 +13,7 @@ pub trait SharedStateProvider: Send + Sync {
     fn find_handle(&self, id: &ID) -> bool;
 
     fn destroy_session(&self, id: &ID) -> bool;
+    fn destroy_handle(&self, id: &ID) -> bool;
 }
 
 pub struct HashSetStateProvider {
@@ -72,6 +73,10 @@ impl SharedStateProvider for HashSetStateProvider {
 
     fn destroy_session(&self, id: &ID) -> bool {
         self.sessions.lock().unwrap().remove(id)
+    }
+
+    fn destroy_handle(&self, id: &ID) -> bool {
+        self.handles.lock().unwrap().remove(id)
     }
 }
 

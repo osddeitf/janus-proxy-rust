@@ -104,7 +104,7 @@ impl<'a> Janus<'a> {
             /* Session-level request */
             if handle_id == 0 {
                 match message_text {
-                    "attach" => self.create_handle(&request, &json::parse(&text)?).await,
+                    "attach" => self.attach_plugin(&request, &json::parse(&text)?).await,
                     "destroy" => self.destroy_session(&request).await,
                     "detach" | "hangup" | "message" | "trickle" => Err(
                         JanusError::new(JANUS_ERROR_INVALID_REQUEST_PATH, format!("Unhandled request '{}' at this path", message_text))
@@ -119,8 +119,9 @@ impl<'a> Janus<'a> {
                     return Err(JanusError::new(JANUS_ERROR_HANDLE_NOT_FOUND, format!("No such handle \"{}\" in session \"{}\"", handle_id, session_id)))
                 }
 
+                // TODO: is there any request not return handle_id?
                 match message_text {
-                    // "detach" => (),
+                    "detach" => self.detach_plugin(&request).await,
                     // "hangup" => (),
                     // "message" => (),
                     // "trickle" => (),
@@ -147,13 +148,13 @@ impl<'a> Janus<'a> {
     }
 
     async fn destroy_session(&self, request: &IncomingRequestParameters) -> Result<String, JanusError> {
-        //TODO: Clean-up, should close websocket connection?
+        // TODO: Clean-up, should close websocket connection?
         self.store.destroy_session(&request.session_id);
-        //TODO: notify event handlers. Btw, what is 'event handler'
+        // TODO: notify event handlers. Btw, what is 'event handler'
         JanusResponse::new("success", &request).stringify()
     }
 
-    async fn create_handle(&self, request: &IncomingRequestParameters, attach_params: &AttachParameters) -> Result<String, JanusError>{
+    async fn attach_plugin(&self, request: &IncomingRequestParameters, attach_params: &AttachParameters) -> Result<String, JanusError>{
         // TODO: verify `token`
         let mut plugin = find_plugin(&attach_params.plugin)?;
         if let Some(opaque_id) = &attach_params.opaque_id {
@@ -164,5 +165,11 @@ impl<'a> Janus<'a> {
 
         let id = self.store.new_handle_id();
         JanusResponse::new_with_data("success", &request, json!({ "id": id })).stringify()
+    }
+
+    async fn detach_plugin(&self, request: &IncomingRequestParameters) -> Result<String, JanusError> {
+        // TODO: clean-up
+        self.store.destroy_handle(&request.handle_id);
+        JanusResponse::new("success", &request).stringify()
     }
 }

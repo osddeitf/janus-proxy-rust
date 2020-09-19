@@ -13,7 +13,7 @@ pub struct IncomingRequestParameters {
 	#[serde(default, skip_serializing_if = "is_zero")]
 	pub session_id: JSON_POSITIVE_INTEGER,
 	#[serde(default, skip_serializing_if = "is_zero")]
-	pub handle_id: JSON_POSITIVE_INTEGER
+	pub handle_id: JSON_POSITIVE_INTEGER		//TODO: should be renamed to `sender`?
 }
 
 #[skip_serializing_none]
