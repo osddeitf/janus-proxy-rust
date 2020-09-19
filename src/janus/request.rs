@@ -20,7 +20,7 @@ pub struct IncomingRequestParameters {
 #[derive(Serialize, Deserialize)]
 pub struct AttachParameters {
 	pub plugin: JSON_STRING,		// JANUS_JSON_PARAM_REQUIRED
-	pub opaque_id: JSON_STRING
+	pub opaque_id: Option<JSON_STRING>
 }
 
 #[skip_serializing_none]
