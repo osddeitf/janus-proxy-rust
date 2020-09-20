@@ -1,29 +1,57 @@
-use serde::{Serialize, Deserialize};
 use crate::janus::error::JanusError;
-use super::json;
 use crate::janus::videoroom::VideoRoomPlugin;
 use crate::janus::error::JanusErrorCode::*;
+use crate::janus::json::{JSON_OBJECT, JSON_POSITIVE_INTEGER};
 
 pub trait Plugin {
-    fn handle(&self, message: &PluginMessage) -> Result<String, JanusError> {
-        println!("Data: {}", message.body);
-        json::stringify(&message.body)
+    fn handle_message(&self, body: JSON_OBJECT) -> Result<PluginResult, JanusError> {
+        Ok(PluginResult::new_ok(body))
     }
     fn set_opaque_id(&mut self, opaque_id: &str);
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct PluginMessage {
-    pub janus: String,      //should be "message"
-    pub session_id: u64,
-    pub handle_id: u64,
-    pub transaction: String,
-    pub body: serde_json::Value
+#[allow(non_camel_case_types)]
+pub enum PluginResultType {
+    JANUS_PLUGIN_ERROR,
+    JANUS_PLUGIN_OK,
+    JANUS_PLUGIN_OK_WAIT
 }
 
-pub fn find_plugin(name: &str) -> Result<Box<dyn Plugin>, JanusError> {
+pub struct PluginResult {
+    pub kind: PluginResultType,     // 'type' is reserved
+    pub text: Option<String>,
+    pub content: Option<JSON_OBJECT>
+}
+
+impl PluginResult {
+    pub fn new_ok(data: JSON_OBJECT) -> PluginResult {
+        PluginResult {
+            kind: PluginResultType::JANUS_PLUGIN_OK,
+            text: None, content: Some(data)
+        }
+    }
+
+    pub fn new_ok_wait(text: String) -> PluginResult {
+        PluginResult {
+            kind: PluginResultType::JANUS_PLUGIN_OK_WAIT,
+            text: Some(text), content: None
+        }
+    }
+
+    pub fn new_error() -> PluginResult {
+        PluginResult {
+            kind: PluginResultType::JANUS_PLUGIN_ERROR,
+            text: None, content: None
+        }
+    }
+}
+
+pub fn find_plugin(name: &str, handle_id: JSON_POSITIVE_INTEGER) -> Result<Box<dyn Plugin>, JanusError> {
     match name {
-        "janus.plugin.videoroom" => Ok(Box::new(VideoRoomPlugin) as Box<dyn Plugin>),
+        "janus.plugin.videoroom" => {
+            let plugin = VideoRoomPlugin::new(handle_id);
+            Ok(Box::new(plugin))
+        },
         _ => Err(JanusError::new(JANUS_ERROR_PLUGIN_NOT_FOUND, format!("No such plugin '{}'", name)))
     }
 }

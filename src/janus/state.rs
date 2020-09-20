@@ -1,16 +1,18 @@
 use super::json::*;
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use rand::prelude::*;
 use std::sync::Mutex;
 
 type ID = JSON_POSITIVE_INTEGER;
 
 pub trait SharedStateProvider: Send + Sync {
-    fn new_session_id(&self) -> ID;
-    fn new_handle_id(&self) -> ID;
+    fn new_session(&self) -> ID;
+    fn new_handle(&self, plugin_name: String) -> ID;
     // TODO: return handle/session object?
-    fn find_session(&self, id: &ID) -> bool;
-    fn find_handle(&self, id: &ID) -> bool;
+    fn has_session(&self, id: &ID) -> bool;
+    fn has_handle(&self, id: &ID) -> bool;
+
+    fn get_handle(&self, id: &ID) -> Option<String>;
 
     fn destroy_session(&self, id: &ID) -> bool;
     fn destroy_handle(&self, id: &ID) -> bool;
@@ -19,14 +21,14 @@ pub trait SharedStateProvider: Send + Sync {
 pub struct HashSetStateProvider {
     sessions: Mutex<HashSet<ID>>,
     // Must be unique within a session, using global index for simplicity
-    handles: Mutex<HashSet<ID>>
+    handles: Mutex<HashMap<ID, String>>
 }
 
 impl HashSetStateProvider {
     pub fn new() -> HashSetStateProvider {
         HashSetStateProvider {
             sessions: Mutex::new(HashSet::new()),
-            handles: Mutex::new(HashSet::new())
+            handles: Mutex::new(HashMap::new())
         }
     }
 
@@ -43,7 +45,7 @@ impl HashSetStateProvider {
 }
 
 impl SharedStateProvider for HashSetStateProvider {
-    fn new_session_id(&self) -> ID {
+    fn new_session(&self) -> ID {
         loop {
             let id = self.rand();
             let mut sessions = self.sessions.lock().unwrap();
@@ -53,22 +55,27 @@ impl SharedStateProvider for HashSetStateProvider {
         }
     }
 
-    fn new_handle_id(&self) -> ID {
+    fn new_handle(&self, plugin_name: String) -> ID {
         loop {
             let id = self.rand();
             let mut handles = self.handles.lock().unwrap();
-            if handles.insert(id) {
+            if !handles.contains_key(&id) {
+                handles.insert(id, plugin_name);
                 return id
             }
         }
     }
 
-    fn find_session(&self, id: &ID) -> bool {
+    fn has_session(&self, id: &ID) -> bool {
         self.sessions.lock().unwrap().contains(id)
     }
 
-    fn find_handle(&self, id: &ID) -> bool {
-        self.handles.lock().unwrap().contains(id)
+    fn has_handle(&self, id: &ID) -> bool {
+        self.handles.lock().unwrap().contains_key(id)
+    }
+
+    fn get_handle(&self, id: &ID) -> Option<String> {
+        self.handles.lock().unwrap().get(id).map(|s| s.clone())
     }
 
     fn destroy_session(&self, id: &ID) -> bool {
@@ -76,7 +83,7 @@ impl SharedStateProvider for HashSetStateProvider {
     }
 
     fn destroy_handle(&self, id: &ID) -> bool {
-        self.handles.lock().unwrap().remove(id)
+        self.handles.lock().unwrap().remove(id).is_none()
     }
 }
 

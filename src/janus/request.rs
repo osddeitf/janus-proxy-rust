@@ -26,7 +26,9 @@ pub struct AttachParameters {
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize)]
 pub struct BodyParameters {
-	pub body: JSON_OBJECT
+	pub body: JSON_OBJECT,
+	/** Unofficial property */
+	pub jsep: Option<JSON_OBJECT>
 }
 
 #[skip_serializing_none]

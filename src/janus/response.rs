@@ -4,6 +4,12 @@ use super::json::{self, *};
 use super::error::JanusError;
 use super::request::IncomingRequestParameters;
 
+#[derive(Serialize)]
+struct PluginResultWrapper<'a> {
+    plugin: &'a str,
+    data: JSON_OBJECT
+}
+
 #[skip_serializing_none]
 #[derive(Serialize)]
 pub struct JanusResponse<'a> {
@@ -22,7 +28,7 @@ pub struct JanusResponse<'a> {
     /** create, attach request */
     data: Option<JSON_OBJECT>,
     /** plugin request */
-    plugin_data: Option<JSON_OBJECT>,
+    plugin_data: Option<PluginResultWrapper<'a>>,
 
     /** JSEP SDP */
     jsep: Option<JSON_OBJECT>
@@ -44,11 +50,18 @@ impl<'a> JanusResponse<'a> {
             transaction: &request.transaction,
             error: None,
             session_id: request.session_id,
-            sender: request.handle_id,
+            sender: 0,
             data: None,
             plugin_data: None,
             jsep: None
         }
+    }
+
+    pub fn new_plugin_result(name: &'a str, request: &'a JanusRequest, plugin: &'a str, data: JSON_OBJECT) -> JanusResponse<'a> {
+        let mut response = Self::new(name, request);
+        response.sender = request.handle_id;
+        response.plugin_data = Some(PluginResultWrapper { plugin, data });
+        response
     }
 
     // TODO: whether `JanusRequest` and `JanusError` or not should have the same lifetime parameter

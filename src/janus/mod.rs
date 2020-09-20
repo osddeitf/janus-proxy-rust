@@ -14,7 +14,7 @@ mod connection;
 // use self::videoroom::VideoRoom;
 use self::request::*;
 use self::response::*;
-use self::plugin::find_plugin;
+use self::plugin::{find_plugin, PluginResultType::*};
 use self::error::{JanusError, JanusErrorCode::*};
 use self::state::SharedStateProvider;
 use self::connection::accept_ws;
@@ -88,7 +88,7 @@ impl<'a> Janus<'a> {
                 return Err(JanusError::new(JANUS_ERROR_SESSION_NOT_FOUND, format!("Invalid session")))
             }
 
-            let session = self.store.find_session(&session_id);
+            let session = self.store.has_session(&session_id);
             if !session {
                 return Err(JanusError::new(JANUS_ERROR_SESSION_NOT_FOUND, format!("No such session \"{}\"", session_id)))
             }
@@ -104,7 +104,7 @@ impl<'a> Janus<'a> {
             /* Session-level request */
             if handle_id == 0 {
                 match message_text {
-                    "attach" => self.attach_plugin(&request, &json::parse(&text)?).await,
+                    "attach" => self.attach_plugin(&request, json::parse(&text)?).await,
                     "destroy" => self.destroy_session(&request).await,
                     "detach" | "hangup" | "message" | "trickle" => Err(
                         JanusError::new(JANUS_ERROR_INVALID_REQUEST_PATH, format!("Unhandled request '{}' at this path", message_text))
@@ -114,8 +114,7 @@ impl<'a> Janus<'a> {
             }
             else {
                 /* Handle-level request */
-                let handle = self.store.find_handle(&handle_id);
-                if !handle {
+                if !self.store.has_handle(&handle_id) {
                     return Err(JanusError::new(JANUS_ERROR_HANDLE_NOT_FOUND, format!("No such handle \"{}\" in session \"{}\"", handle_id, session_id)))
                 }
 
@@ -123,7 +122,7 @@ impl<'a> Janus<'a> {
                 match message_text {
                     "detach" => self.detach_plugin(&request).await,
                     "hangup" => self.hangup_plugin(&request).await,
-                    // "message" => (),
+                    "message" => self.handle_plugin_message(&request, json::parse(&text)?).await,
                     // "trickle" => (),
                     "attach" | "destroy" => Err(
                         JanusError::new(JANUS_ERROR_INVALID_REQUEST_PATH, format!("Unhandled request '{}' at this path", message_text))
@@ -142,7 +141,7 @@ impl<'a> Janus<'a> {
     async fn create_session(&self, request: &IncomingRequestParameters) -> Result<String, JanusError> {
         // TODO: `apisecret`, `token` authentication?
 
-        let id = self.store.new_session_id();
+        let id = self.store.new_session();
         let data = json!({ "id": id });
         JanusResponse::new_with_data("success", request, data).stringify()
     }
@@ -154,16 +153,15 @@ impl<'a> Janus<'a> {
         JanusResponse::new("success", &request).stringify()
     }
 
-    async fn attach_plugin(&self, request: &IncomingRequestParameters, attach_params: &AttachParameters) -> Result<String, JanusError>{
+    async fn attach_plugin(&self, request: &IncomingRequestParameters, attach_params: AttachParameters) -> Result<String, JanusError>{
         // TODO: verify `token`
-        let mut plugin = find_plugin(&attach_params.plugin)?;
-        if let Some(opaque_id) = &attach_params.opaque_id {
-            plugin.set_opaque_id(opaque_id);
-        }
+        // if let Some(opaque_id) = &attach_params.opaque_id {
+        //     plugin.set_opaque_id(opaque_id);
+        // }
 
         // TODO: Initalize plugin (ice?,...)
 
-        let id = self.store.new_handle_id();
+        let id = self.store.new_handle(attach_params.plugin);
         JanusResponse::new_with_data("success", &request, json!({ "id": id })).stringify()
     }
 
@@ -176,5 +174,28 @@ impl<'a> Janus<'a> {
     async fn hangup_plugin(&self, request: &IncomingRequestParameters) -> Result<String, JanusError> {
         // TODO: do real hangup
         JanusResponse::new("success", &request).stringify()
+    }
+
+    async fn handle_plugin_message(&self, request: &IncomingRequestParameters, body_params: BodyParameters) -> Result<String, JanusError> {
+        let name = self.store.get_handle(&request.handle_id);
+        if name.is_none() {
+            return Err(JanusError::new(JANUS_ERROR_PLUGIN_MESSAGE, format!("No plugin to handle this message")))
+        }
+        let name = name.unwrap();
+        let plugin = find_plugin(&name, request.handle_id)?;
+
+        // TODO: handle jsep
+        let result = plugin.handle_message(body_params.body)?;
+
+        match result.kind {
+            // TODO: handle optional content
+            JANUS_PLUGIN_OK => JanusResponse::new_plugin_result("success", &request, &name, result.content.unwrap()).stringify(),
+            // TODO: add `hint`
+            JANUS_PLUGIN_OK_WAIT => JanusResponse::new("ack", &request).stringify(),
+            JANUS_PLUGIN_ERROR => {
+                let text = result.text.unwrap_or("Plugin returned a severe (unknown) error".to_string());
+                Err(JanusError::new(JANUS_ERROR_PLUGIN_MESSAGE, text))
+            }
+        }
     }
 }
