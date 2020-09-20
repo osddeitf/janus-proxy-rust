@@ -48,7 +48,25 @@ impl<'a> Janus<'a> {
         //     .await;
         while let Some(item) = rx.next().await {
             let response = self.handle_websocket(item).await;
-            tx.send(response.unwrap()).await.unwrap();      //TODO: handle `tx` closed
+            match response {
+                Ok(res) => if let Err(e) = tx.send(res).await {
+                    match e {
+                        Error::ConnectionClosed => return println!("Connection closed"),
+                        Error::AlreadyClosed => return eprintln!("Internal error: connection already closed"),
+                        // Error::Io(_) => {}
+                        // Error::Tls(_) => {}
+                        // Error::Capacity(_) => {}
+                        // Error::Protocol(_) => {}
+                        // Error::SendQueueFull(_) => {}
+                        // Error::Utf8 => {}
+                        // Error::Url(_) => {}
+                        // Error::Http(_) => {}
+                        // Error::HttpFormat(_) => {}
+                        _ => ()
+                    }
+                },
+                Err(e) => eprintln!("Internal error: {}", e)
+            }
         }
     }
 
