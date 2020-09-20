@@ -13,6 +13,7 @@ pub trait Plugin {
 
 #[allow(non_camel_case_types)]
 pub enum PluginResultType {
+    // 'Shutting down' or 'Plugin not initialized'
     JANUS_PLUGIN_ERROR,
     JANUS_PLUGIN_OK,
     JANUS_PLUGIN_OK_WAIT
