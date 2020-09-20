@@ -15,7 +15,7 @@ mod connection;
 use self::request::*;
 use self::response::*;
 use self::plugin::{find_plugin, PluginResultType::*};
-use self::error::{JanusError, JanusErrorCode::*};
+use self::error::{JanusError, code::*};
 use self::state::SharedStateProvider;
 use self::connection::accept_ws;
 use futures::{StreamExt, SinkExt};
@@ -203,7 +203,7 @@ impl<'a> Janus<'a> {
         let plugin = find_plugin(&name, request.handle_id)?;
 
         // TODO: handle jsep
-        let result = plugin.handle_message(body_params.body)?;
+        let result = plugin.handle_message(serde_json::to_string(&body_params.body).unwrap())?;
 
         match result.kind {
             // TODO: handle optional content

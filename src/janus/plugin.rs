@@ -1,11 +1,12 @@
 use crate::janus::error::JanusError;
 use crate::janus::videoroom::VideoRoomPlugin;
-use crate::janus::error::JanusErrorCode::*;
-use crate::janus::json::{JSON_OBJECT, JSON_POSITIVE_INTEGER};
+use crate::janus::error::code::*;
+use crate::janus::json::{self, *};
 
 pub trait Plugin {
-    fn handle_message(&self, body: JSON_OBJECT) -> Result<PluginResult, JanusError> {
-        Ok(PluginResult::new_ok(body))
+    fn handle_message(&self, body: String) -> Result<PluginResult, JanusError> {
+        let data = json::parse(&body)?;
+        Ok(PluginResult::new_ok(data))
     }
     fn set_opaque_id(&mut self, opaque_id: &str);
 }
