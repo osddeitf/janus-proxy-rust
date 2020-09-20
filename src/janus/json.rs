@@ -8,6 +8,9 @@ pub type JSON_STRING = String;
 pub type JSON_STRING_SLICE<'a> = &'a str;
 
 #[allow(non_camel_case_types)]
+pub type JSON_STRING_ARRAY = Vec<String>;
+
+#[allow(non_camel_case_types)]
 pub type JSON_OBJECT = serde_json::Value;
 
 // #[allow(non_camel_case_types)]
