@@ -29,7 +29,7 @@ pub struct JanusResponse {
     data: Option<JSON_OBJECT>,
 
     /** plugin request */
-    plugin_data: Option<PluginResultWrapper>,
+    plugindata: Option<PluginResultWrapper>,
 
     /** JSEP SDP */
     jsep: Option<JSON_OBJECT>
@@ -55,7 +55,7 @@ impl JanusResponse {
             session_id: session,
             sender: 0,
             data: None,
-            plugin_data: None,
+            plugindata: None,
             jsep: None
         }
     }
@@ -63,7 +63,7 @@ impl JanusResponse {
     pub fn new_result(name: &'static str, transaction: String, handle: &JanusHandle, data: JSON_OBJECT) -> JanusResponse {
         let mut response = Self::new(name, handle.session_id, transaction);
         response.sender = handle.handle_id;
-        response.plugin_data = Some(PluginResultWrapper { plugin: handle.plugin.get_name(), data });
+        response.plugindata = Some(PluginResultWrapper { plugin: handle.plugin.get_name(), data });
         response
     }
 
@@ -75,7 +75,7 @@ impl JanusResponse {
             session_id: 0,
             sender: 0,
             data: None,
-            plugin_data: None,
+            plugindata: None,
             jsep: None
         }
     }

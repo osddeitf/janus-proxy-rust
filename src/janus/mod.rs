@@ -7,6 +7,7 @@ mod request;
 mod response;
 pub mod state;
 pub mod plugin;
+mod helper;
 
 /**
 * Request types are ported from janus-gateway v0.10.5
@@ -131,9 +132,7 @@ impl JanusProxy {
                     "create" => {
                         let id = self.state.new_session();
                         let session = JanusSession::new(id);
-                        {
-                            self.sessions.write().await.insert(session.session_id, session);
-                        }
+                        self.sessions.write().await.insert(session.session_id, session);
 
                         let json = json!({ "id": id });
                         JanusResponse::new("success", 0, transaction).data(json)
