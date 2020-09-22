@@ -26,6 +26,7 @@ use self::plugin::{JanusPluginProvider, JanusPluginResultType::*};
 use self::error::{JanusError, code::*};
 use self::state::SharedStateProvider;
 use self::connection::accept_ws;
+use crate::janus::plugin::JanusPluginMessage;
 
 pub struct JanusProxy {
     _janus_server: String,
@@ -80,9 +81,8 @@ impl JanusProxy {
                     match item {
                         Ok(message) => {
                             let res = janus.handle_websocket(tx.clone(), message).await;
-                            match tx.send(res).await {
-                                Ok(_) => (),
-                                Err(_) => break     // channel closed
+                            if tx.send(res).await.is_err() {
+                                break     // channel closed
                             }
                         },
                         Err(e) => eprintln!("Internal error: {}", e)
@@ -94,9 +94,7 @@ impl JanusProxy {
 
     async fn handle_websocket(&self, tx: JanusEventEmitter, item: Message) -> Message {
         if let Message::Text(data) = item {
-            let response  = self.handle_request(tx, data).await;
-            let text = response.stringify().ok().unwrap();
-            Message::Text(text)
+            self.handle_request(tx, data).await.into()
         }
         else {
             item
@@ -121,21 +119,21 @@ impl JanusProxy {
         // TODO: prevent memory copy as soon as possible: verify `transaction` length.
         let response_transaction = transaction.clone();
         let response_error = |e: JanusError| {
-            JanusResponse::new("error", session_id, response_transaction).err(e)
+            JanusResponse::new("error", session_id, response_transaction).with_err(e)
         };
 
         let response = async {
             if session_id == 0 && handle_id == 0 {
                 let response = match &message_text[..] {
                     "ping" => JanusResponse::new("pong", 0, transaction),
-                    "info" => JanusResponse::new("server_info", 0, transaction).data(json!({})), // TODO: response server info
+                    "info" => JanusResponse::new("server_info", 0, transaction).with_data(json!({})), // TODO: response server info
                     "create" => {
                         let id = self.state.new_session();
                         let session = JanusSession::new(id);
                         self.sessions.write().await.insert(session.session_id, session);
 
                         let json = json!({ "id": id });
-                        JanusResponse::new("success", 0, transaction).data(json)
+                        JanusResponse::new("success", 0, transaction).with_data(json)
                     }
                     x => return Err(
                         JanusError::new(JANUS_ERROR_INVALID_REQUEST_PATH, format!("Unhandled request '{}' at this path", x))
@@ -174,7 +172,7 @@ impl JanusProxy {
                         self.sessions.write().await.get_mut(&session_id).unwrap().handles.insert(id, Arc::new(handle));
 
                         let json = json!({ "id": id });
-                        JanusResponse::new("success", session_id, transaction).data(json)
+                        JanusResponse::new("success", session_id, transaction).with_data(json)
                     },
                     "destroy" => {
                         // TODO: Clean-up, should close websocket connection?
@@ -231,16 +229,18 @@ impl JanusProxy {
     }
 
     async fn handle_plugin_message(transaction: String, handle: &Arc<JanusHandle>, body_params: BodyParameters) -> Result<JanusResponse, JanusError> {
-        // if name.is_none() {
-        //     return Err(JanusError::new(JANUS_ERROR_PLUGIN_MESSAGE, format!("No plugin to handle this message")))
-        // }
-
-        // TODO: handle jsep
-        let result = handle.plugin.handle_message(serde_json::to_string(&body_params.body).unwrap())?;
+        // Too many copy - TODO
+        let result = handle.plugin.handle_message(JanusPluginMessage::new(
+            Arc::clone(handle),
+            transaction.clone(),
+            serde_json::to_string(&body_params.body).unwrap(),
+            body_params.jsep
+        ));
 
         let response = match result.kind {
             // TODO: handle optional content
-            JANUS_PLUGIN_OK => JanusResponse::new_result("success", transaction, handle, result.content.unwrap()),
+            JANUS_PLUGIN_OK => JanusResponse::new("success", handle.session_id, transaction)
+                .with_plugindata(handle.handle_id, handle.plugin.get_name(), result.content.unwrap()),
             // TODO: add `hint`
             JANUS_PLUGIN_OK_WAIT => JanusResponse::new("ack", handle.session_id, transaction),
             JANUS_PLUGIN_ERROR => {

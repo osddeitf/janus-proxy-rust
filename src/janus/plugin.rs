@@ -1,17 +1,32 @@
 use crate::janus::error::JanusError;
 use crate::janus::videoroom::VideoRoomPluginFactory;
 use crate::janus::error::code::*;
-use crate::janus::json::{self, *};
+use crate::janus::json::*;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use crate::janus::core::JanusHandle;
 
+// Resemble `janus_videoroom_handle_message` function signature
+pub struct JanusPluginMessage {
+    pub handle: Arc<JanusHandle>,
+    pub transaction: String,
+    pub body: String,
+    pub jsep: Option<JSON_OBJECT>
+}
+
+impl JanusPluginMessage {
+    pub fn new(handle: Arc<JanusHandle>, transaction: String, body: String, jsep: Option<JSON_OBJECT>) -> JanusPluginMessage {
+        JanusPluginMessage { handle, transaction, body, jsep }
+    }
+}
+
+// * functions in traits cannot be declared `async`
+// May `handle_message*` return JanusError? TODO
 pub trait JanusPlugin: Send + Sync {
     fn get_name(&self) -> &'static str;
-    fn handle_message(&self, body: String) -> Result<JanusPluginResult, JanusError> {
-        let data = json::parse(&body)?;
-        Ok(JanusPluginResult::new_ok(data))
-    }
-    fn set_opaque_id(&mut self, opaque_id: &str);
+    fn handle_message(&self, message: JanusPluginMessage) -> JanusPluginResult;
+    fn handle_async_message(&self, message: JanusPluginMessage) -> JanusPluginResult;
+    // fn set_opaque_id(&mut self, opaque_id: &str);
 }
 
 #[allow(non_camel_case_types, dead_code)]
@@ -30,21 +45,21 @@ pub struct JanusPluginResult {
 
 #[allow(dead_code)]
 impl JanusPluginResult {
-    pub fn new_ok(data: JSON_OBJECT) -> JanusPluginResult {
+    pub fn ok(data: JSON_OBJECT) -> JanusPluginResult {
         JanusPluginResult {
             kind: JanusPluginResultType::JANUS_PLUGIN_OK,
             text: None, content: Some(data)
         }
     }
 
-    pub fn new_ok_wait(text: String) -> JanusPluginResult {
+    pub fn wait(text: Option<String>) -> JanusPluginResult {
         JanusPluginResult {
             kind: JanusPluginResultType::JANUS_PLUGIN_OK_WAIT,
-            text: Some(text), content: None
+            text, content: None
         }
     }
 
-    pub fn new_error() -> JanusPluginResult {
+    pub fn err() -> JanusPluginResult {
         JanusPluginResult {
             kind: JanusPluginResultType::JANUS_PLUGIN_ERROR,
             text: None, content: None

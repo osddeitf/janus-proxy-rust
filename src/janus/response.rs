@@ -2,7 +2,7 @@ use serde::Serialize;
 use serde_with::skip_serializing_none;
 use super::json::{self, *};
 use super::error::JanusError;
-use super::core::JanusHandle;
+use tokio_tungstenite::tungstenite::Message;
 
 #[derive(Serialize)]
 struct PluginResultWrapper {
@@ -36,13 +36,19 @@ pub struct JanusResponse {
 }
 
 impl JanusResponse {
-    pub fn data(mut self, data: JSON_OBJECT) -> JanusResponse {
+    pub fn with_data(mut self, data: JSON_OBJECT) -> JanusResponse {
         self.data = Some(data);
         self
     }
 
-    pub fn err(mut self, error: JanusError) -> JanusResponse {
+    pub fn with_err(mut self, error: JanusError) -> JanusResponse {
         self.error = Some(error);
+        self
+    }
+
+    pub fn with_plugindata(mut self, handle_id: u64, plugin: &'static str, data: JSON_OBJECT) -> JanusResponse {
+        self.sender = handle_id;
+        self.plugindata = Some(PluginResultWrapper { plugin, data });
         self
     }
 
@@ -60,13 +66,6 @@ impl JanusResponse {
         }
     }
 
-    pub fn new_result(name: &'static str, transaction: String, handle: &JanusHandle, data: JSON_OBJECT) -> JanusResponse {
-        let mut response = Self::new(name, handle.session_id, transaction);
-        response.sender = handle.handle_id;
-        response.plugindata = Some(PluginResultWrapper { plugin: handle.plugin.get_name(), data });
-        response
-    }
-
     pub fn bad_request(error: JanusError) -> JanusResponse {
         JanusResponse {
             janus: "error",
@@ -82,5 +81,12 @@ impl JanusResponse {
 
     pub fn stringify(&self) -> Result<String, JanusError> {
         json::stringify(self)
+    }
+}
+
+impl From<JanusResponse> for Message {
+    fn from(response: JanusResponse) -> Self {
+        let text = response.stringify().ok().unwrap();
+        Message::Text(text)
     }
 }

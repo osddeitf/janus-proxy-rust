@@ -1,8 +1,10 @@
 use std::collections::HashMap;
-use crate::janus::plugin::JanusPlugin;
+use crate::janus::plugin::{JanusPlugin, JanusPluginMessage};
 use std::sync::Arc;
-use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message;
+use tokio::stream::StreamExt;
+use crate::janus::response::JanusResponse;
 
 pub struct JanusSession {
     pub session_id: u64,
@@ -18,21 +20,48 @@ impl JanusSession {
     }
 }
 
-pub type JanusEventEmitter = Sender<Message>;
+pub type JanusEventEmitter = mpsc::Sender<Message>;
 pub struct JanusHandle {
     pub plugin: Arc<Box<dyn JanusPlugin>>,
     pub handle_id: u64,
     pub session_id: u64,
-    pub event_emitter: JanusEventEmitter
+
+    /** Push event to underlying websocket connection */
+    pub event_push: JanusEventEmitter,
+
+    /** Push async message to processing queue (single for now) */
+    pub handler_thread: mpsc::Sender<JanusPluginMessage>
 }
 
 impl JanusHandle {
-    pub fn new(id: u64, session: u64, event_emitter: JanusEventEmitter, plugin: Arc<Box<dyn JanusPlugin>>) -> JanusHandle {
-        JanusHandle {
+    pub fn new(id: u64, session: u64, event_push: JanusEventEmitter, plugin: Arc<Box<dyn JanusPlugin>>) -> JanusHandle {
+        let (tx, mut rx) = mpsc::channel::<JanusPluginMessage>(32);
+
+        let _plugin_ = Arc::clone(&plugin);
+        let mut _event_push_ = mpsc::Sender::clone(&event_push);
+
+        let handle = JanusHandle {
             plugin,
-            event_emitter,
+            event_push,
             session_id: session,
-            handle_id: id
-        }
+            handle_id: id,
+            handler_thread: tx
+        };
+
+        tokio::spawn(async move {
+            while let Some(message) = rx.next().await {
+                // TODO: don't copy
+                let transaction = message.transaction.clone();
+                let result = _plugin_.handle_async_message(message);
+                let response = JanusResponse::new("event", session, transaction)
+                    .with_plugindata(id, _plugin_.get_name(), result.content.unwrap());
+
+                if _event_push_.send(response.into()).await.is_err() {
+                    break
+                }
+            }
+        });
+
+        handle
     }
 }
