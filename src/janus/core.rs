@@ -20,14 +20,14 @@ impl JanusSession {
 
 pub type JanusEventEmitter = Sender<Message>;
 pub struct JanusHandle {
-    pub plugin: Box<dyn JanusPlugin>,
+    pub plugin: Arc<Box<dyn JanusPlugin>>,
     pub handle_id: u64,
     pub session_id: u64,
     pub event_emitter: JanusEventEmitter
 }
 
 impl JanusHandle {
-    pub fn new(id: u64, session: u64, event_emitter: JanusEventEmitter, plugin: Box<dyn JanusPlugin>) -> JanusHandle {
+    pub fn new(id: u64, session: u64, event_emitter: JanusEventEmitter, plugin: Arc<Box<dyn JanusPlugin>>) -> JanusHandle {
         JanusHandle {
             plugin,
             event_emitter,

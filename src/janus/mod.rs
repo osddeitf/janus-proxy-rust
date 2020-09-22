@@ -1,12 +1,12 @@
-mod plugin;
+mod core;
+mod connection;
 mod error;
 mod videoroom;
 mod json;
 mod request;
 mod response;
 pub mod state;
-mod core;
-mod connection;
+pub mod plugin;
 
 /**
 * Request types are ported from janus-gateway v0.10.5
@@ -21,7 +21,7 @@ use std::sync::Arc;
 use self::core::*;
 use self::request::*;
 use self::response::*;
-use self::plugin::{find_plugin, JanusPluginResultType::*};
+use self::plugin::{JanusPluginProvider, JanusPluginResultType::*};
 use self::error::{JanusError, code::*};
 use self::state::SharedStateProvider;
 use self::connection::accept_ws;
@@ -29,14 +29,16 @@ use self::connection::accept_ws;
 pub struct JanusProxy {
     _janus_server: String,
     state: Box<dyn SharedStateProvider>,
+    plugins: JanusPluginProvider,
     sessions: RwLock<HashMap<u64, JanusSession>>     // TODO: switch to tokio::sync::Mutex?
 }
 
 impl JanusProxy {
-    pub fn new(server: String, state_provider: Box<dyn SharedStateProvider>) -> JanusProxy {
+    pub fn new(server: String, state_provider: Box<dyn SharedStateProvider>, plugin_provider: JanusPluginProvider) -> JanusProxy {
         JanusProxy {
             _janus_server: server,
             state: state_provider,
+            plugins: plugin_provider,
             sessions: RwLock::new(HashMap::new())
         }
     }
@@ -166,7 +168,7 @@ impl JanusProxy {
                         // TODO: verify `token`, `opaque_id`
                         let params: AttachParameters = json::parse(&text)?;
                         let id = self.state.new_handle();
-                        let plugin = find_plugin(&params.plugin)?;
+                        let plugin = self.plugins.resolve(params.plugin)?;
                         let handle = JanusHandle::new(id, session_id, tx, plugin);
 
                         // TODO: check existence first

@@ -1,4 +1,13 @@
-use super::plugin::JanusPlugin;
+use super::plugin::{JanusPlugin, JanusPluginResult, JanusPluginFactory, BoxedPlugin};
+
+pub struct VideoRoomPluginFactory;
+
+impl JanusPluginFactory for VideoRoomPluginFactory {
+    fn new(&self) -> BoxedPlugin {
+        Box::new(VideoRoomPlugin::new())
+    }
+}
+
 
 pub struct VideoRoomPlugin {}
 

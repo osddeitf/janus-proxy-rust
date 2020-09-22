@@ -1,6 +1,7 @@
 use tokio::net::{TcpListener};
 use janus_proxy::janus::state::{HashSetStateProvider};
 use janus_proxy::janus::JanusProxy;
+use janus_proxy::janus::plugin::JanusPluginProvider;
 
 #[tokio::main]
 async fn main() {
@@ -9,6 +10,11 @@ async fn main() {
     let listener = socket.expect("Failed to bind");
 
     let server = String::from("ws://localhost:8188");
-    let janus = JanusProxy::new(server, Box::new(HashSetStateProvider::new()));
+    let janus = JanusProxy::new(
+        server,
+        Box::new(HashSetStateProvider::new()),
+        JanusPluginProvider::default()
+    );
+
     JanusProxy::listen(janus, listener).await;
 }
