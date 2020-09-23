@@ -1,15 +1,15 @@
 use std::collections::HashMap;
-use crate::janus::plugin::{JanusPlugin, JanusPluginMessage};
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use tokio_tungstenite::tungstenite::Message;
 use tokio::stream::StreamExt;
-use crate::janus::response::JanusResponse;
 use tokio::task::JoinHandle;
+use tokio_tungstenite::tungstenite::Message;
+use super::plugin::{JanusPlugin, JanusPluginMessage};
+use super::response::JanusResponse;
 
 pub struct JanusSession {
     pub session_id: u64,
-    pub handles: HashMap<u64, Arc<JanusHandle>>
+    pub handles: HashMap<u64, Arc<JanusHandle>>     // TODO: consider using std::sync::Weak
 }
 
 impl JanusSession {
@@ -33,7 +33,7 @@ pub struct JanusHandle {
     /** Push async message to processing queue (single for now) */
     pub handler_thread: mpsc::Sender<JanusPluginMessage>,
 
-    /** Internal join handler, get drop with handle. TODO: verify the statement is correct */
+    /** Internal join handler, get drop with handle. TODO: verify this statement is correct */
     worker: JoinHandle<()>
 }
 
@@ -58,6 +58,7 @@ impl JanusHandle {
             }
         });
 
+        plugin.new_plugin_session(id);
         JanusHandle {
             plugin,
             event_push,
@@ -66,5 +67,12 @@ impl JanusHandle {
             handler_thread: tx,
             worker: join_handle
         }
+    }
+}
+
+impl Drop for JanusHandle {
+    fn drop(&mut self) {
+        println!("Handle dropped");
+        self.plugin.drop_plugin_session(&self.handle_id);
     }
 }

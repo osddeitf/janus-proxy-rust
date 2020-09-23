@@ -27,6 +27,11 @@ pub trait JanusPlugin: Send + Sync {
     fn handle_message(&self, message: JanusPluginMessage) -> JanusPluginResult;
     fn handle_async_message(&self, message: JanusPluginMessage) -> JanusPluginResult;
     // fn set_opaque_id(&mut self, opaque_id: &str);
+
+    // TODO: wait for `async fn` in trait stable
+    /** Functions allow memory-safety allocate/deallocate handle-scope state. */
+    fn new_plugin_session(&self, handle_id: u64);
+    fn drop_plugin_session(&self, handle_id: &u64);
 }
 
 #[allow(non_camel_case_types, dead_code)]
