@@ -5,6 +5,7 @@ use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message;
 use tokio::stream::StreamExt;
 use crate::janus::response::JanusResponse;
+use tokio::task::JoinHandle;
 
 pub struct JanusSession {
     pub session_id: u64,
@@ -30,7 +31,10 @@ pub struct JanusHandle {
     pub event_push: JanusEventEmitter,
 
     /** Push async message to processing queue (single for now) */
-    pub handler_thread: mpsc::Sender<JanusPluginMessage>
+    pub handler_thread: mpsc::Sender<JanusPluginMessage>,
+
+    /** Internal join handler, get drop with handle. TODO: verify the statement is correct */
+    worker: JoinHandle<()>
 }
 
 impl JanusHandle {
@@ -40,15 +44,7 @@ impl JanusHandle {
         let _plugin_ = Arc::clone(&plugin);
         let mut _event_push_ = mpsc::Sender::clone(&event_push);
 
-        let handle = JanusHandle {
-            plugin,
-            event_push,
-            session_id: session,
-            handle_id: id,
-            handler_thread: tx
-        };
-
-        tokio::spawn(async move {
+        let join_handle = tokio::spawn(async move {
             while let Some(message) = rx.next().await {
                 // TODO: don't copy
                 let transaction = message.transaction.clone();
@@ -62,6 +58,13 @@ impl JanusHandle {
             }
         });
 
-        handle
+        JanusHandle {
+            plugin,
+            event_push,
+            session_id: session,
+            handle_id: id,
+            handler_thread: tx,
+            worker: join_handle
+        }
     }
 }

@@ -28,11 +28,17 @@ use self::state::SharedStateProvider;
 use self::connection::accept_ws;
 use crate::janus::plugin::JanusPluginMessage;
 
+// TODO: add gracefully shutdown
 pub struct JanusProxy {
     _janus_server: String,
+    /** Local mapping from connection_id -> session_id. TODO: Is there any better way? */
+    connections: RwLock<HashMap<u64, Option<u64>>>,
+    /** Shared state between instances: include "session_ids" and "handle_ids" */
     state: Box<dyn SharedStateProvider>,
+    /** Plugin resolver */
     plugins: JanusPluginProvider,
-    sessions: RwLock<HashMap<u64, JanusSession>>     // TODO: switch to tokio::sync::Mutex?
+    /** Local sessions (managed by this instance, corresponding to a websocket connection) store */
+    sessions: RwLock<HashMap<u64, JanusSession>>
 }
 
 impl JanusProxy {
@@ -41,6 +47,7 @@ impl JanusProxy {
             _janus_server: server,
             state: state_provider,
             plugins: plugin_provider,
+            connections: RwLock::new(HashMap::new()),
             sessions: RwLock::new(HashMap::new())
         }
     }
@@ -53,9 +60,21 @@ impl JanusProxy {
             let (mut wtx, mut wrx) = ws.split();
             let (mut tx, mut rx) = mpsc::channel::<Message>(32);
 
+            // Assign this websocket a unique connection_id
+            let connection_id = loop {
+                let id = helper::rand_id();
+                let mut connections = janus.connections.write().await;
+                if !connections.contains_key(&id) {
+                    connections.insert(id, None);
+                    break id
+                }
+            };
+            println!("New connection {}", connection_id);
+
             tokio::spawn(async move {
                 while let Some(message) = rx.recv().await {
                     if let Err(e) = wtx.send(message).await {
+                        // TODO: more properly error handling
                         match e {
                             Error::ConnectionClosed => println!("Connection closed"),
                             Error::AlreadyClosed => eprintln!("Internal error: connection already closed"),
@@ -80,7 +99,7 @@ impl JanusProxy {
                 while let Some(item) = wrx.next().await {
                     match item {
                         Ok(message) => {
-                            let res = janus.handle_websocket(tx.clone(), message).await;
+                            let res = janus.handle_websocket(connection_id, tx.clone(), message).await;
                             if tx.send(res).await.is_err() {
                                 break     // channel closed
                             }
@@ -88,20 +107,27 @@ impl JanusProxy {
                         Err(e) => eprintln!("Internal error: {}", e)
                     };
                 }
+
+                // This clean up session (if present) and any resources associated (owned) with it
+                let mut connections = janus.connections.write().await;
+                if let Some(Some(session_id)) = connections.get(&connection_id) {
+                    janus.destroy_session(session_id).await;
+                    connections.remove(&connection_id);
+                }
             });
         }
     }
 
-    async fn handle_websocket(&self, tx: JanusEventEmitter, item: Message) -> Message {
+    async fn handle_websocket(&self, connection_id: u64, tx: JanusEventEmitter, item: Message) -> Message {
         if let Message::Text(data) = item {
-            self.handle_request(tx, data).await.into()
+            self.handle_request(connection_id, tx, data).await.into()
         }
         else {
             item
         }
     }
 
-    async fn handle_request(&self, tx: JanusEventEmitter, text: String) -> JanusResponse {
+    async fn handle_request(&self, connection_id: u64, tx: JanusEventEmitter, text: String) -> JanusResponse {
         let request: IncomingRequestParameters = match json::parse(&text) {
             Ok(x) => x,
             Err(e) => return JanusResponse::bad_request(e)
@@ -128,10 +154,7 @@ impl JanusProxy {
                     "ping" => JanusResponse::new("pong", 0, transaction),
                     "info" => JanusResponse::new("server_info", 0, transaction).with_data(json!({})), // TODO: response server info
                     "create" => {
-                        let id = self.state.new_session();
-                        let session = JanusSession::new(id);
-                        self.sessions.write().await.insert(session.session_id, session);
-
+                        let id = self.create_session(connection_id).await;
                         let json = json!({ "id": id });
                         JanusResponse::new("success", 0, transaction).with_data(json)
                     }
@@ -175,9 +198,7 @@ impl JanusProxy {
                         JanusResponse::new("success", session_id, transaction).with_data(json)
                     },
                     "destroy" => {
-                        // TODO: Clean-up, should close websocket connection?
-                        self.state.remove_session(&session_id);
-                        self.sessions.write().await.remove(&session_id);
+                        self.destroy_session(&session_id).await;
                         // TODO: notify event handlers. Btw, what is 'event handler'
                         JanusResponse::new("success", session_id, transaction)
                     },
@@ -249,5 +270,19 @@ impl JanusProxy {
             }
         };
         Ok(response)
+    }
+
+    async fn create_session(&self, connection_id: u64) -> u64 {
+        let id = self.state.new_session();
+        let session = JanusSession::new(id);
+        self.connections.write().await.insert(connection_id, Some(id));
+        self.sessions.write().await.insert(id, session);
+        id
+    }
+
+    async fn destroy_session(&self, session_id: &u64) {
+        // TODO: Clean-up handles, as Arc wrapped
+        self.state.remove_session(session_id);
+        self.sessions.write().await.remove(session_id);
     }
 }
