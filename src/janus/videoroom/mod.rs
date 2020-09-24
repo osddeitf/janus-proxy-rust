@@ -16,7 +16,7 @@ use std::sync::{Mutex, Arc, Weak};
 use serde_json::json;
 use self::constant::*;
 use self::error::*;
-use self::request::CreateParameters;
+use self::request::{CreateParameters, JoinParameters, SubscriberParameters, PublishParameters, ConfigureParameters};
 use self::request_mixin::*;
 use self::state::{VideoRoomStateProvider, LocalVideoRoomState};
 use super::core::JanusHandle;
@@ -128,7 +128,144 @@ impl VideoRoomPlugin {
     }
 
     fn process_message_async(&self, handle: Arc<JanusHandle>, message: JanusPluginMessage) -> Result<JanusPluginResult, VideoroomError> {
-        Ok(JanusPluginResult::ok(message.body.into()))
+        let request: RequestParameters = helper::parse_json(&message.body)?;
+        let request_text = request.request;
+        let sessions = Arc::clone(self.sessions.lock().unwrap().get(&handle.handle_id).unwrap());
+
+        if sessions.participant_type == JANUS_VIDEOROOM_P_TYPE_NONE {
+            if request_text != "join" && request_text != "joinandconfigure" {
+                return Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_JOIN_FIRST, format!("Invalid request on unconfigured participant")))
+            }
+
+            let join_params: JoinParameters = helper::parse_json(&message.body)?;
+            return match &join_params.ptype[..] {
+                "publisher" => {
+                    // TODO: check room access
+                    // TODO: set display name
+                    // TODO: set user id (or random?)
+
+                    // TODO: mutex...
+                    // sessions.participant_type = JANUS_VIDEOROOM_P_TYPE_PUBLISHER
+
+                    // TODO: return list of available publishers
+                    let data = json!({
+                        "videoroom": "joined",
+                        "room": 0, //
+                        "description": "",
+                        "id": 0,    // feed
+                        "private_id": 0,
+                        "publishers": []
+                        // ...omitted... TODO
+                    });
+                    Ok(JanusPluginResult::ok(data))
+                },
+                // "listener" is deprecated
+                "subscriber" | "listener" => {
+                    let _params: SubscriberParameters = helper::parse_json(&message.body)?;
+                    // TODO: verify `spatial_layer`, `substream`
+                    // TODO: verify `temporal`, `temporal_layer`
+
+                    // TODO: verify `feed` (publisher) existence
+                    // TODO: mutex...
+                    // sessions.participant_type = JANUS_VIDEOROOM_P_TYPE_SUBSCRIBER
+                    let data = json!({
+                        "videoroom": "attached",
+                        "room": 0, //
+                        "id": 0, // feed
+                        // ...omitted... TODO
+                    });
+                    Ok(JanusPluginResult::ok(data))
+                },
+                _ => Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_INVALID_ELEMENT, String::from("Invalid element (ptype)")))
+            }
+        }
+        else if sessions.participant_type == JANUS_VIDEOROOM_P_TYPE_PUBLISHER {
+            if request_text == "join" || request_text == "joinandconfigure" {
+                return Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_ALREADY_JOINED, String::from("Already in as a publisher on this handle")))
+            }
+
+            return match &request_text[..] {
+                "configure" | "publish" => {
+                    // TODO: "publish" -> check already published
+                    // TODO: check kicked
+                    let _params: PublishParameters = helper::parse_json(&message.body)?;
+                    // TODO: should verify audiocodec, videocodec?
+                    let data = json!({
+                        "videoroom": "event",
+                        "room": 0,
+                        "configured": "ok"
+                    });
+                    Ok(JanusPluginResult::ok(data))
+                },
+                "unpublish" => {
+                    let data = json!({
+                        "videoroom": "event",
+                        "room": 0,
+                        "unpublished": "ok"
+                    });
+                    Ok(JanusPluginResult::ok(data))
+                },
+                "leave" => {
+                    let data = json!({
+                        "videoroom": "event",
+                        "room": 0,
+                        "leaving": "ok"
+                    });
+                    Ok(JanusPluginResult::ok(data))
+                },
+                _ => Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_INVALID_REQUEST, format!("Unknown request '{}'", request_text)))
+            }
+        }
+        else if sessions.participant_type == JANUS_VIDEOROOM_P_TYPE_SUBSCRIBER {
+            return match &request_text[..] {
+                "join" => Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_ALREADY_JOINED, String::from("Already in as a subscriber on this handle"))),
+                "start" => {
+                    let data = json!({
+                        "videoroom": "event",
+                        "room": 0,
+                        "started": "ok"
+                    });
+                    Ok(JanusPluginResult::ok(data))
+                },
+                "configure" => {
+                    let _params: ConfigureParameters = helper::parse_json(&message.body)?;
+                    let data = json!({
+                        "videoroom": "event",
+                        "room": 0,
+                        "configured": "ok"
+                    });
+                    Ok(JanusPluginResult::ok(data))
+                },
+                "pause" => {
+                    let data = json!({
+                        "videoroom": "event",
+                        "room": 0,
+                        "paused": "ok"
+                    });
+                    Ok(JanusPluginResult::ok(data))
+                },
+                "switch" => {
+                    let _params: SubscriberParameters = helper::parse_json(&message.body)?;
+                    let data = json!({
+                        "videoroom": "event",
+                        "room": 0,
+                        "id": 0,
+                        "switched": "ok"
+                    });
+                    Ok(JanusPluginResult::ok(data))
+                },
+                "leave" => {
+                    let data = json!({
+                        "videoroom": "event",
+                        "room": 0,
+                        "left": "ok"
+                    });
+                    Ok(JanusPluginResult::ok(data))
+                },
+                _ => Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_INVALID_REQUEST, format!("Unknown request '{}'", request_text)))
+            }
+        }
+        Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_UNKNOWN_ERROR, String::from("Unexpected server error, plugin state malformed")))
     }
 
     /** This function only validate and store the room for later creation */

@@ -140,6 +140,7 @@ pub type EnableRecordingParameters = RecordParameters;
 /** Asynchronous request type definitions */
 #[derive(Deserialize)]
 pub struct JoinParameters {
+	pub feed: JSON_POSITIVE_INTEGER,
     pub ptype: JSON_STRING, // JANUS_JSON_PARAM_REQUIRED
 	pub audio: Option<JSON_BOOL>,
 	pub video: Option<JSON_BOOL>,
