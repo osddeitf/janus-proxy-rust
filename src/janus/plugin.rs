@@ -3,19 +3,19 @@ use crate::janus::videoroom::VideoRoomPluginFactory;
 use crate::janus::error::code::*;
 use crate::janus::json::*;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 use crate::janus::core::JanusHandle;
 
 // Resemble `janus_videoroom_handle_message` function signature
 pub struct JanusPluginMessage {
-    pub handle: Arc<JanusHandle>,
+    pub handle: Weak<JanusHandle>,
     pub transaction: String,
     pub body: String,
     pub jsep: Option<JSON_OBJECT>
 }
 
 impl JanusPluginMessage {
-    pub fn new(handle: Arc<JanusHandle>, transaction: String, body: String, jsep: Option<JSON_OBJECT>) -> JanusPluginMessage {
+    pub fn new(handle: Weak<JanusHandle>, transaction: String, body: String, jsep: Option<JSON_OBJECT>) -> JanusPluginMessage {
         JanusPluginMessage { handle, transaction, body, jsep }
     }
 }
@@ -25,7 +25,7 @@ impl JanusPluginMessage {
 pub trait JanusPlugin: Send + Sync {
     fn get_name(&self) -> &'static str;
     fn handle_message(&self, message: JanusPluginMessage) -> JanusPluginResult;
-    fn handle_async_message(&self, message: JanusPluginMessage) -> JanusPluginResult;
+    fn handle_async_message(&self, message: JanusPluginMessage) -> Option<JanusPluginResult>;
     // fn set_opaque_id(&mut self, opaque_id: &str);
 
     // TODO: wait for `async fn` in trait stable

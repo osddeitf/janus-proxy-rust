@@ -228,7 +228,9 @@ impl JanusProxy {
                     },
                     "message" => {
                         // TODO: check session existence first
-                        let handle = self.sessions.read().await.get(&session_id).unwrap().handles.get(&handle_id).unwrap().clone();
+                        let handle = Arc::clone(
+                            self.sessions.read().await.get(&session_id).unwrap().handles.get(&handle_id).unwrap()
+                        );
                         return Self::handle_plugin_message(transaction, &handle, json::parse(&text)?).await
                     },
                     // TODO: do real hangup.. Should forward to plugin?
@@ -252,7 +254,7 @@ impl JanusProxy {
     async fn handle_plugin_message(transaction: String, handle: &Arc<JanusHandle>, body_params: BodyParameters) -> Result<JanusResponse, JanusError> {
         // Too many copy - TODO
         let result = handle.plugin.handle_message(JanusPluginMessage::new(
-            Arc::clone(handle),
+            Arc::downgrade(handle),
             transaction.clone(),
             serde_json::to_string(&body_params.body).unwrap(),
             body_params.jsep

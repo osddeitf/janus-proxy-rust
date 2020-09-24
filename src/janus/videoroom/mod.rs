@@ -14,10 +14,11 @@ use serde_json::json;
 use self::error::*;
 use self::request::CreateParameters;
 use self::request_mixin::*;
-use self::state::VideoRoomStateProvider;
-use self::state::LocalVideoRoomState;
+use self::state::{VideoRoomStateProvider, LocalVideoRoomState};
+use super::core::JanusHandle;
 use super::plugin::{JanusPlugin, JanusPluginResult, JanusPluginFactory, BoxedPlugin, JanusPluginMessage};
 use super::json::JSON_OBJECT;
+use std::sync::{Arc, Weak};
 
 pub struct VideoRoomPluginFactory;
 
@@ -53,11 +54,16 @@ impl JanusPlugin for VideoRoomPlugin {
         }
     }
 
-    fn handle_async_message(&self, message: JanusPluginMessage) -> JanusPluginResult {
-        // TODO: do real handle
-        JanusPluginResult::ok(message.body.into())
+    fn handle_async_message(&self, message: JanusPluginMessage) -> Option<JanusPluginResult> {
+        let handle = match Weak::upgrade(&message.handle) {
+            Some(x) => x,
+            None => return None
+        };
+        match self.process_message_async(handle, message) {
+            Ok(x) => Some(x),
+            Err(e) => Some(JanusPluginResult::ok(e.into()))
+        }
     }
-}
 
 impl VideoRoomPlugin {
     fn process_message(&self, message: JanusPluginMessage) -> Result<JanusPluginResult, VideoroomError> {
@@ -76,25 +82,24 @@ impl VideoRoomPlugin {
             // "listparticipants" => (),
             // "listforwarders" => (),
             // "enable_recording" => (),
-            "join"
-            | "joinandconfigure"
-            | "configure"
-            | "publish"
-            | "unpublish"
-            | "start"
-            | "pause"
-            | "switch"
-            | "leave" => {
-                // TODO: push to message queue
-                tokio::spawn(async move {
-                    message.handle.handler_thread.clone().send(message).await;
-                });
+            x if ["join", "joinandconfigure", "configure", "publish", "unpublish", "start", "pause", "switch", "leave"].contains(&x) => {
+                if let Some(handle) = Weak::upgrade(&message.handle) {
+                    tokio::spawn(async move {
+                        if let Err(_) = handle.handler_thread.clone().send(message).await {
+                            // let ignore "closed channel" error for now
+                        }
+                    });
+                }
                 Ok(JanusPluginResult::wait(None))
             }
             _ => Err(
                 VideoroomError::new(JANUS_VIDEOROOM_ERROR_INVALID_REQUEST, format!("Unknown request '{}'", request_text))
             )
         }
+    }
+
+    fn process_message_async(&self, handle: Arc<JanusHandle>, message: JanusPluginMessage) -> Result<JanusPluginResult, VideoroomError> {
+        Ok(JanusPluginResult::ok(message.body.into()))
     }
 
     /** This function only validate and store the room for later creation */

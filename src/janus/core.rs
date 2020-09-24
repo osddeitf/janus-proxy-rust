@@ -48,7 +48,11 @@ impl JanusHandle {
             while let Some(message) = rx.next().await {
                 // TODO: don't copy
                 let transaction = message.transaction.clone();
-                let result = _plugin_.handle_async_message(message);
+                let result = match _plugin_.handle_async_message(message) {
+                    Some(x) => x,
+                    None => break
+                };
+
                 let response = JanusResponse::new("event", session, transaction)
                     .with_plugindata(id, _plugin_.get_name(), result.content.unwrap());
 
