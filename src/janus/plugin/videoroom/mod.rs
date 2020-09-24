@@ -19,7 +19,7 @@ use self::request::{CreateParameters, JoinParameters, SubscriberParameters, Publ
 use self::request_mixin::*;
 use self::provider::{VideoRoomStateProvider, LocalVideoRoomState};
 use crate::janus::plugin::{JanusPlugin, JanusPluginResult, JanusPluginMessage};
-use crate::janus::json::JSON_OBJECT;
+use crate::janus::core::json::JSON_OBJECT;
 use crate::janus::core::JanusHandle;
 use crate::janus::provider::{JanusPluginFactory, BoxedPlugin};
 
