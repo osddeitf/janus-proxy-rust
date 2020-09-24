@@ -9,8 +9,12 @@ mod request_mixin;
 mod helper;
 mod room;
 mod state;
+mod constant;
 
+use std::collections::HashMap;
+use std::sync::{Mutex, Arc, Weak};
 use serde_json::json;
+use self::constant::*;
 use self::error::*;
 use self::request::CreateParameters;
 use self::request_mixin::*;
@@ -18,7 +22,6 @@ use self::state::{VideoRoomStateProvider, LocalVideoRoomState};
 use super::core::JanusHandle;
 use super::plugin::{JanusPlugin, JanusPluginResult, JanusPluginFactory, BoxedPlugin, JanusPluginMessage};
 use super::json::JSON_OBJECT;
-use std::sync::{Arc, Weak};
 
 pub struct VideoRoomPluginFactory;
 
@@ -30,14 +33,31 @@ impl JanusPluginFactory for VideoRoomPluginFactory {
 }
 
 
+struct VideoRoomSession {
+    participant_type: u8,
+    // participant: Option<?>
+    // gateway: Websocket connection to janus-gateway
+}
+
+impl VideoRoomSession {
+    pub fn new() -> VideoRoomSession {
+        VideoRoomSession {
+            participant_type: JANUS_VIDEOROOM_P_TYPE_NONE
+        }
+    }
+}
+
+
 pub struct VideoRoomPlugin {
-    state: Box<dyn VideoRoomStateProvider>
+    state: Box<dyn VideoRoomStateProvider>,
+    sessions: Mutex<HashMap<u64, Arc<VideoRoomSession>>>     // must use std::sync?
 }
 
 impl VideoRoomPlugin {
     pub fn new(state_provider: Box<dyn VideoRoomStateProvider>) -> VideoRoomPlugin {
         VideoRoomPlugin {
-            state: state_provider
+            state: state_provider,
+            sessions: Mutex::new(HashMap::new())
         }
     }
 }
@@ -64,6 +84,15 @@ impl JanusPlugin for VideoRoomPlugin {
             Err(e) => Some(JanusPluginResult::ok(e.into()))
         }
     }
+
+    fn new_plugin_session(&self, handle_id: u64) {
+        self.sessions.lock().unwrap().insert(handle_id, Arc::new(VideoRoomSession::new()));
+    }
+
+    fn drop_plugin_session(&self, handle_id: &u64) {
+        self.sessions.lock().unwrap().remove(handle_id);
+    }
+}
 
 impl VideoRoomPlugin {
     fn process_message(&self, message: JanusPluginMessage) -> Result<JanusPluginResult, VideoroomError> {
