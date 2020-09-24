@@ -1,5 +1,5 @@
-use super::helper;
-use super::json::*;
+use crate::janus::helper;
+use crate::janus::json::*;
 use std::collections::HashSet;
 use std::sync::Mutex;
 
@@ -9,12 +9,17 @@ type ID = JSON_POSITIVE_INTEGER;
 pub trait SharedStateProvider: Send + Sync {
     fn new_session(&self) -> ID;
     fn new_handle(&self) -> ID;
+
     // TODO: return handle/session object?
     fn has_session(&self, id: &ID) -> bool;
     fn has_handle(&self, id: &ID) -> bool;
 
     fn remove_session(&self, id: &ID) -> bool;
     fn remove_handle(&self, id: &ID) -> bool;
+
+    // Status: preview. TODO: refine the apis
+    // fn update_backend(&self, url: String, up: bool);
+    // fn get_backend(&self) -> Option<String>;
 }
 
 pub struct HashSetStateProvider {

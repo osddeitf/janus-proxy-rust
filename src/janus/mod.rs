@@ -5,9 +5,9 @@ mod videoroom;
 mod json;
 mod request;
 mod response;
-pub mod state;
-pub mod plugin;
 mod helper;
+pub mod plugin;
+pub mod provider;
 
 /**
 * Request types are ported from janus-gateway v0.10.5
@@ -22,9 +22,9 @@ use std::sync::Arc;
 use self::core::*;
 use self::request::*;
 use self::response::*;
-use self::plugin::{JanusPluginProvider, JanusPluginResultType::*};
+use self::plugin::JanusPluginResultType::*;
 use self::error::{JanusError, code::*};
-use self::state::SharedStateProvider;
+use self::provider::{SharedStateProvider, JanusPluginProvider};
 use self::connection::accept_ws;
 use crate::janus::plugin::JanusPluginMessage;
 

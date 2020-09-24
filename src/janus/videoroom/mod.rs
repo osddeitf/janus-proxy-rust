@@ -7,8 +7,7 @@ mod request;
 #[allow(dead_code)]
 mod request_mixin;
 mod helper;
-mod room;
-mod state;
+mod provider;
 mod constant;
 
 use std::collections::HashMap;
@@ -18,10 +17,11 @@ use self::constant::*;
 use self::error::*;
 use self::request::{CreateParameters, JoinParameters, SubscriberParameters, PublishParameters, ConfigureParameters};
 use self::request_mixin::*;
-use self::state::{VideoRoomStateProvider, LocalVideoRoomState};
+use self::provider::{VideoRoomStateProvider, LocalVideoRoomState};
 use super::core::JanusHandle;
-use super::plugin::{JanusPlugin, JanusPluginResult, JanusPluginFactory, BoxedPlugin, JanusPluginMessage};
+use super::plugin::{JanusPlugin, JanusPluginResult, JanusPluginMessage};
 use super::json::JSON_OBJECT;
+use super::provider::{JanusPluginFactory, BoxedPlugin};
 
 pub struct VideoRoomPluginFactory;
 

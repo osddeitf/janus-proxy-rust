@@ -1,7 +1,6 @@
 use tokio::net::{TcpListener};
-use janus_proxy::janus::state::{HashSetStateProvider};
+use janus_proxy::janus::provider::{HashSetStateProvider, JanusPluginProvider};
 use janus_proxy::janus::JanusProxy;
-use janus_proxy::janus::plugin::JanusPluginProvider;
 
 #[tokio::main]
 async fn main() {
