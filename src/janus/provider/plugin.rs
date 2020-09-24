@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Mutex, Arc};
 use crate::janus::plugin::JanusPlugin;
-use crate::janus::videoroom::VideoRoomPluginFactory;
+use crate::janus::plugin::videoroom::VideoRoomPluginFactory;
 use crate::janus::error::JanusError;
 use crate::janus::error::code::JANUS_ERROR_PLUGIN_NOT_FOUND;
 

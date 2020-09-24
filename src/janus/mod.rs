@@ -1,7 +1,6 @@
 mod core;
 mod connection;
 mod error;
-mod videoroom;
 mod json;
 mod request;
 mod response;

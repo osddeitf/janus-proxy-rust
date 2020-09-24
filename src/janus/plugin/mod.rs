@@ -1,5 +1,7 @@
-use crate::janus::json::*;
+pub(crate) mod videoroom;
+
 use std::sync::Weak;
+use crate::janus::json::*;
 use crate::janus::core::JanusHandle;
 
 // Resemble `janus_videoroom_handle_message` function signature

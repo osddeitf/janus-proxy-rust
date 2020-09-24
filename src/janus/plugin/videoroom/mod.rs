@@ -18,10 +18,10 @@ use self::error::*;
 use self::request::{CreateParameters, JoinParameters, SubscriberParameters, PublishParameters, ConfigureParameters};
 use self::request_mixin::*;
 use self::provider::{VideoRoomStateProvider, LocalVideoRoomState};
-use super::core::JanusHandle;
-use super::plugin::{JanusPlugin, JanusPluginResult, JanusPluginMessage};
-use super::json::JSON_OBJECT;
-use super::provider::{JanusPluginFactory, BoxedPlugin};
+use crate::janus::plugin::{JanusPlugin, JanusPluginResult, JanusPluginMessage};
+use crate::janus::json::JSON_OBJECT;
+use crate::janus::core::JanusHandle;
+use crate::janus::provider::{JanusPluginFactory, BoxedPlugin};
 
 pub struct VideoRoomPluginFactory;
 

@@ -1,6 +1,6 @@
 use serde_json::json;
-use crate::janus::json::JSON_OBJECT;
 use serde_json::error::Category;
+use crate::janus::json::JSON_OBJECT;
 
 pub static JANUS_VIDEOROOM_ERROR_UNKNOWN_ERROR     : u32 = 499;
 pub static JANUS_VIDEOROOM_ERROR_NO_MESSAGE        : u32 = 421;
