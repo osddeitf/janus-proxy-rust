@@ -97,16 +97,17 @@ impl VideoRoomPlugin {
         }
     }
 
+    /** This function only validate and store the room for later creation */
     fn create_room(&self, mut params: CreateParameters) -> Result<JanusPluginResult, VideoroomError>{
-        if let Some(audiocodec) = params.audiocodec {
-            let supported = vec!["opus", "multiopus", "isac32", "isac16", "pcmu", "pcma", "g722"];
+        if let Some(audiocodec) = &params.audiocodec {
+            let supported = ["opus", "multiopus", "isac32", "isac16", "pcmu", "pcma", "g722"];
             if !audiocodec.split(",").take(4).all(|x| supported.contains(&x)) {
                 let reason = format!("Invalid element (audiocodec can only be or contain opus, isac32, isac16, pcmu, pcma or g722)");
                 return Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_INVALID_ELEMENT, reason))
             }
         }
-        if let Some(videocodec) = params.videocodec {
-            let supported = vec!["vp8", "vp9", "h264", "av1", "h265"];
+        if let Some(videocodec) = &params.videocodec {
+            let supported = ["vp8", "vp9", "h264", "av1", "h265"];
             if !videocodec.split(",").take(4).all(|x| supported.contains(&x)) {
                 let reason = format!("Invalid element (videocodec can only be or contain vp8, vp9, av1, h264 or h265)");
                 return Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_INVALID_ELEMENT, reason))
@@ -133,6 +134,9 @@ impl VideoRoomPlugin {
             "room": room,
             "permanent": params.permanent.is_some()
         }));
+
+        // TODO: store params to send to backend later
+        self.state.save_room_parameters(params);
 
         Ok(result)
     }
