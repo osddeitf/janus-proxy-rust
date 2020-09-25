@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use crate::janus::plugin::JanusPlugin;
-use crate::janus::plugin::videoroom::VideoRoomPluginFactory;
+use super::JanusPlugin;
+use super::videoroom::VideoRoomPluginFactory;
 use crate::janus::error::JanusError;
 use crate::janus::error::code::JANUS_ERROR_PLUGIN_NOT_FOUND;
 

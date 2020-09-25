@@ -21,7 +21,7 @@ use self::request_mixin::*;
 use self::provider::{VideoRoomStateProvider, MemoryVideoRoomState};
 use crate::janus::plugin::{JanusPlugin, JanusPluginResult, JanusPluginMessage};
 use crate::janus::core::json::JSON_OBJECT;
-use crate::janus::provider::{JanusPluginFactory, BoxedPlugin};
+use super::{JanusPluginFactory, BoxedPlugin};
 
 pub struct VideoRoomPluginFactory;
 

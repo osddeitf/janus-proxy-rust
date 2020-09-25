@@ -1,7 +1,8 @@
-use tokio::net::{TcpListener};
-use janus_proxy::janus::provider::{MemoryStateProvider, JanusPluginProvider, MemoryBackendProvider, JanusBackendProvider};
-use janus_proxy::janus::JanusProxy;
 use std::sync::Arc;
+use tokio::net::{TcpListener};
+use janus_proxy::janus::JanusProxy;
+use janus_proxy::janus::plugin::JanusPluginProvider;
+use janus_proxy::janus::provider::{MemoryStateProvider, MemoryBackendProvider, JanusBackendProvider};
 
 #[tokio::main]
 async fn main() {

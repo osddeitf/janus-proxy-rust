@@ -1,5 +1,7 @@
-pub(crate) mod videoroom;
+mod videoroom;
+mod provider;
 
+pub use self::provider::*;
 use std::sync::Weak;
 use async_trait::async_trait;
 use crate::janus::core::json::*;

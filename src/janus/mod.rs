@@ -20,8 +20,9 @@ use self::core::*;
 use self::request::*;
 use self::response::*;
 use self::error::{JanusError, code::*};
-use self::provider::{ProxyStateProvider, JanusPluginProvider, JanusBackendProvider};
+use self::provider::{ProxyStateProvider, JanusBackendProvider};
 use self::connection::accept_ws;
+use self::plugin::JanusPluginProvider;
 
 // TODO: add gracefully shutdown
 pub struct JanusProxy {
