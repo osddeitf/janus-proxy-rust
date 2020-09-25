@@ -1,6 +1,6 @@
 use serde::Deserialize;
 use super::request_mixin::*;
-use crate::janus::json::*;
+use crate::janus::core::json::*;
 
 // mixins: RoomParameters (optional), AdminKeyParameters (if enabled)
 #[derive(Deserialize)]

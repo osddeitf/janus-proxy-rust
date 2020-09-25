@@ -18,11 +18,9 @@ use std::sync::Arc;
 use self::core::*;
 use self::request::*;
 use self::response::*;
-use self::plugin::JanusPluginResultType::*;
 use self::error::{JanusError, code::*};
 use self::provider::{SharedStateProvider, JanusPluginProvider};
 use self::connection::accept_ws;
-use crate::janus::plugin::JanusPluginMessage;
 
 // TODO: add gracefully shutdown
 pub struct JanusProxy {
@@ -222,10 +220,11 @@ impl JanusProxy {
                     },
                     "message" => {
                         // TODO: check session existence first
+                        let params: BodyParameters = json::parse(&text)?;
                         let handle = Arc::clone(
                             self.sessions.read().await.get(&session_id).unwrap().handles.get(&handle_id).unwrap()
                         );
-                        return Self::handle_plugin_message(transaction, &handle, json::parse(&text)?).await
+                        return JanusHandle::handle_message(handle, transaction, params.body, params.jsep).await
                     },
                     // TODO: do real hangup.. Should forward to plugin?
                     "hangup" => JanusResponse::new("success", session_id, transaction),
@@ -243,29 +242,6 @@ impl JanusProxy {
         };
 
         response.await.unwrap_or_else(response_error)
-    }
-
-    async fn handle_plugin_message(transaction: String, handle: &Arc<JanusHandle>, body_params: BodyParameters) -> Result<JanusResponse, JanusError> {
-        // Too many copy - TODO
-        let result = handle.plugin.handle_message(JanusPluginMessage::new(
-            Arc::downgrade(handle),
-            transaction.clone(),
-            serde_json::to_string(&body_params.body).unwrap(),
-            body_params.jsep
-        )).await;
-
-        let response = match result.kind {
-            // TODO: handle optional content
-            JANUS_PLUGIN_OK => JanusResponse::new("success", handle.session_id, transaction)
-                .with_plugindata(handle.handle_id, handle.plugin.get_name(), result.content.unwrap()),
-            // TODO: add `hint`
-            JANUS_PLUGIN_OK_WAIT => JanusResponse::new("ack", handle.session_id, transaction),
-            JANUS_PLUGIN_ERROR => {
-                let text = result.text.unwrap_or("Plugin returned a severe (unknown) error".to_string());
-                return Err(JanusError::new(JANUS_ERROR_PLUGIN_MESSAGE, text))
-            }
-        };
-        Ok(response)
     }
 
     async fn create_session(&self, connection_id: u64) -> u64 {

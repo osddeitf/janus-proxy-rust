@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 use crate::janus::plugin::JanusPlugin;
 use crate::janus::plugin::videoroom::VideoRoomPluginFactory;
 use crate::janus::error::JanusError;
@@ -14,7 +13,7 @@ pub trait JanusPluginFactory: Send + Sync {
 /** Provide singleton instance of each registered plugins */
 pub struct JanusPluginProvider {
     /// Store mapping from 'name' to 'factory' function - create new instance out of thin air
-    plugins: HashMap<String, Box<dyn JanusPluginFactory>>,
+    plugins: HashMap<String, Box<dyn JanusPluginFactory>>
 }
 
 impl JanusPluginProvider {

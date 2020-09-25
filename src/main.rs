@@ -1,5 +1,5 @@
 use tokio::net::{TcpListener};
-use janus_proxy::janus::provider::{HashSetStateProvider, JanusPluginProvider};
+use janus_proxy::janus::provider::{MemoryStateProvider, JanusPluginProvider};
 use janus_proxy::janus::JanusProxy;
 
 #[tokio::main]

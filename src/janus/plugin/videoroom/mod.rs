@@ -21,7 +21,6 @@ use self::request_mixin::*;
 use self::provider::{VideoRoomStateProvider, MemoryVideoRoomState};
 use crate::janus::plugin::{JanusPlugin, JanusPluginResult, JanusPluginMessage};
 use crate::janus::core::json::JSON_OBJECT;
-use crate::janus::core::JanusHandle;
 use crate::janus::provider::{JanusPluginFactory, BoxedPlugin};
 
 pub struct VideoRoomPluginFactory;
@@ -77,10 +76,6 @@ impl JanusPlugin for VideoRoomPlugin {
     }
 
     async fn handle_async_message(&self, message: JanusPluginMessage) -> Option<JanusPluginResult> {
-        let handle = match Weak::upgrade(&message.handle) {
-            Some(x) => x,
-            None => return None
-        };
         match self.process_message_async(message).await {
             Ok(x) => Some(x),
             Err(e) => Some(JanusPluginResult::ok(e.into()))
@@ -107,11 +102,7 @@ impl VideoRoomPlugin {
             // "enable_recording" => (),
             x if ["join", "joinandconfigure", "configure", "publish", "unpublish", "start", "pause", "switch", "leave"].contains(&x) => {
                 if let Some(handle) = Weak::upgrade(&message.handle) {
-                    tokio::spawn(async move {
-                        if let Err(_) = handle.handler_thread.clone().send(message).await {
-                            // let ignore "closed channel" error for now
-                        }
-                    });
+                    handle.queue_push(message).await
                 }
                 Ok(JanusPluginResult::wait(None))
             }
@@ -138,8 +129,7 @@ impl VideoRoomPlugin {
                     // TODO: set display name
                     // TODO: set user id (or random?)
 
-                    // TODO: mutex...
-                    // sessions.participant_type = JANUS_VIDEOROOM_P_TYPE_PUBLISHER
+                    self.session.write().await.participant_type = JANUS_VIDEOROOM_P_TYPE_PUBLISHER;
 
                     // TODO: return list of available publishers
                     let data = json!({

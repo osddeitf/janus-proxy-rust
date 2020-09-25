@@ -8,7 +8,11 @@ use tokio::sync::mpsc;
 use tokio::stream::StreamExt;
 use tokio_tungstenite::tungstenite::Message;
 use super::plugin::{JanusPlugin, JanusPluginMessage};
+use super::plugin::JanusPluginResultType::*;
 use super::response::JanusResponse;
+use super::error::JanusError;
+use super::error::code::JANUS_ERROR_PLUGIN_MESSAGE;
+use self::json::JSON_OBJECT;
 
 pub(crate) struct JanusSession {
     pub session_id: u64,
@@ -26,15 +30,15 @@ impl JanusSession {
 
 pub type JanusEventEmitter = mpsc::Sender<Message>;
 pub struct JanusHandle {
-    pub plugin: Arc<Box<dyn JanusPlugin>>,
-    pub handle_id: u64,
-    pub session_id: u64,
+    plugin: Arc<Box<dyn JanusPlugin>>,
+    handle_id: u64,
+    session_id: u64,
 
     /** Push event to underlying websocket connection */
-    pub event_push: JanusEventEmitter,
+    event_push: JanusEventEmitter,
 
     /** Push async message to processing queue (single for now) */
-    pub handler_thread: mpsc::Sender<JanusPluginMessage>,
+    handler_thread: mpsc::Sender<JanusPluginMessage>,
 }
 
 impl JanusHandle {
@@ -45,6 +49,7 @@ impl JanusHandle {
         let _plugin_ = Arc::clone(&plugin);
         let mut _event_push_ = mpsc::Sender::clone(&event_push);
 
+        // Process async message one-by-one, mimic janus-gateway implementation
         tokio::spawn(async move {
             while let Some(message) = rx.next().await {
                 // TODO: don't copy
@@ -69,6 +74,35 @@ impl JanusHandle {
             session_id: session,
             handle_id: id,
             handler_thread: tx
+        }
+    }
+
+    pub async fn handle_message(handle: Arc<JanusHandle>, transaction: String, body: JSON_OBJECT, jsep: Option<JSON_OBJECT>) -> Result<JanusResponse, JanusError> {
+        // Too many copy - TODO
+        let result = handle.plugin.handle_message(JanusPluginMessage::new(
+            Arc::downgrade(&handle),
+            transaction.clone(),
+            json::stringify(&body)?,
+            jsep
+        )).await;
+
+        let response = match result.kind {
+            // TODO: handle optional content
+            JANUS_PLUGIN_OK => JanusResponse::new("success", handle.session_id, transaction)
+                .with_plugindata(handle.handle_id, handle.plugin.get_name(), result.content.unwrap()),
+            // TODO: add `hint`
+            JANUS_PLUGIN_OK_WAIT => JanusResponse::new("ack", handle.session_id, transaction),
+            JANUS_PLUGIN_ERROR => {
+                let text = result.text.unwrap_or("Plugin returned a severe (unknown) error".to_string());
+                return Err(JanusError::new(JANUS_ERROR_PLUGIN_MESSAGE, text))
+            }
+        };
+        Ok(response)
+    }
+
+    pub async fn queue_push(&self, message: JanusPluginMessage) {
+        if let Err(_) = self.handler_thread.clone().send(message).await {
+            // let ignore "closed channel" error for now
         }
     }
 }

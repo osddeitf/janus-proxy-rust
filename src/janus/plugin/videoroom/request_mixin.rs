@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use crate::janus::json::*;
+use crate::janus::core::json::*;
 
 #[derive(Deserialize)]
 pub struct RequestParameters {
