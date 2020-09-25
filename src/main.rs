@@ -1,6 +1,7 @@
 use tokio::net::{TcpListener};
-use janus_proxy::janus::provider::{MemoryStateProvider, JanusPluginProvider};
+use janus_proxy::janus::provider::{MemoryStateProvider, JanusPluginProvider, MemoryBackendProvider, JanusBackendProvider};
 use janus_proxy::janus::JanusProxy;
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() {
@@ -9,10 +10,17 @@ async fn main() {
     let listener = socket.expect("Failed to bind");
 
     let server = String::from("ws://localhost:8188");
+    let backend = MemoryBackendProvider::new();
+    backend.update_backend(server, true);
+
     let janus = JanusProxy::new(
         Box::new(MemoryStateProvider::new()),
-        JanusPluginProvider::default()
+        JanusPluginProvider::default(),
+        Arc::new(Box::new(backend))
     );
 
+    // TODO: enable http server for managing janus-gateway instances, token...
+
+    // TODO: Check whether .await yield task back to scheduler
     JanusProxy::listen(janus, listener).await;
 }

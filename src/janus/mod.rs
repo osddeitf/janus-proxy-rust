@@ -4,6 +4,7 @@ mod error;
 mod helper;
 pub mod plugin;
 pub mod provider;
+mod backend;
 
 /**
 * Request types are ported from janus-gateway v0.10.5
@@ -19,28 +20,35 @@ use self::core::*;
 use self::request::*;
 use self::response::*;
 use self::error::{JanusError, code::*};
-use self::provider::{SharedStateProvider, JanusPluginProvider};
+use self::provider::{ProxyStateProvider, JanusPluginProvider, JanusBackendProvider};
 use self::connection::accept_ws;
 
 // TODO: add gracefully shutdown
 pub struct JanusProxy {
     /** Local mapping from connection_id -> session_id. TODO: Is there any better way? */
     connections: RwLock<HashMap<u64, Option<u64>>>,
-    /** Shared state between instances: include "session_ids" and "handle_ids" */
-    state: Box<dyn SharedStateProvider>,
-    /** Plugin resolver */
-    plugins: JanusPluginProvider,
     /** Local sessions (managed by this instance, corresponding to a websocket connection) store */
-    sessions: RwLock<HashMap<u64, JanusSession>>
+    sessions: RwLock<HashMap<u64, JanusSession>>,
+    /** Shared state between proxy instances: include "session_ids" and "handle_ids" */
+    state: Box<dyn ProxyStateProvider>,
+    /** Stored backend, like `state` above */
+    backend: Arc<Box<dyn JanusBackendProvider>>,
+    /** Plugin resolver */
+    plugins: JanusPluginProvider
 }
 
 impl JanusProxy {
-    pub fn new(state_provider: Box<dyn SharedStateProvider>, plugin_provider: JanusPluginProvider) -> JanusProxy {
+    pub fn new(
+        state_provider: Box<dyn ProxyStateProvider>,
+        plugin_provider: JanusPluginProvider,
+        backend_provider: Arc<Box<dyn JanusBackendProvider>>
+    ) -> JanusProxy {
         JanusProxy {
-            state: state_provider,
-            plugins: plugin_provider,
             connections: RwLock::new(HashMap::new()),
-            sessions: RwLock::new(HashMap::new())
+            sessions: RwLock::new(HashMap::new()),
+            state: state_provider,
+            backend: backend_provider,
+            plugins: plugin_provider
         }
     }
 
@@ -174,7 +182,7 @@ impl JanusProxy {
             }
 
             /* Session-level request */
-            if handle_id == 0 {
+            return if handle_id == 0 {
                 let response = match &message_text[..] {
                     "attach" => {
                         // TODO: verify `token`, `opaque_id`
@@ -201,7 +209,7 @@ impl JanusProxy {
                         JanusError::new(JANUS_ERROR_UNKNOWN_REQUEST, format!("Unknown request '{}'", x))
                     )
                 };
-                return Ok(response)
+                Ok(response)
             } else {
                 /* Handle-level request */
                 // TODO: check session existence first
@@ -237,7 +245,7 @@ impl JanusProxy {
                         JanusError::new(JANUS_ERROR_UNKNOWN_REQUEST, format!("Unknown request '{}'", x))
                     )
                 };
-                return Ok(response)
+                Ok(response)
             }
         };
 

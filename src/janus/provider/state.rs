@@ -6,7 +6,7 @@ use std::sync::Mutex;
 type ID = JSON_POSITIVE_INTEGER;
 
 // TODO: prevent stale session ids: some instances not gracefully shut down.
-pub trait SharedStateProvider: Send + Sync {
+pub trait ProxyStateProvider: Send + Sync {
     fn new_session(&self) -> ID;
     fn new_handle(&self) -> ID;
 
@@ -33,7 +33,7 @@ impl MemoryStateProvider {
     }
 }
 
-impl SharedStateProvider for MemoryStateProvider {
+impl ProxyStateProvider for MemoryStateProvider {
     fn new_session(&self) -> ID {
         loop {
             let id = helper::rand_id();
