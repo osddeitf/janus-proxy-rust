@@ -10,8 +10,7 @@ async fn main() {
 
     let server = String::from("ws://localhost:8188");
     let janus = JanusProxy::new(
-        server,
-        Box::new(HashSetStateProvider::new()),
+        Box::new(MemoryStateProvider::new()),
         JanusPluginProvider::default()
     );
 

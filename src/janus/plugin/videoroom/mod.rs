@@ -10,14 +10,15 @@ mod helper;
 mod provider;
 mod constant;
 
-use std::collections::HashMap;
-use std::sync::{Mutex, Arc, Weak};
+use std::sync::{Arc, Weak};
 use serde_json::json;
+use async_trait::async_trait;
+use tokio::sync::RwLock;
 use self::constant::*;
 use self::error::*;
 use self::request::{CreateParameters, JoinParameters, SubscriberParameters, PublishParameters, ConfigureParameters};
 use self::request_mixin::*;
-use self::provider::{VideoRoomStateProvider, LocalVideoRoomState};
+use self::provider::{VideoRoomStateProvider, MemoryVideoRoomState};
 use crate::janus::plugin::{JanusPlugin, JanusPluginResult, JanusPluginMessage};
 use crate::janus::core::json::JSON_OBJECT;
 use crate::janus::core::JanusHandle;
@@ -27,8 +28,8 @@ pub struct VideoRoomPluginFactory;
 
 impl JanusPluginFactory for VideoRoomPluginFactory {
     fn new(&self) -> BoxedPlugin {
-        let provider = Box::new(LocalVideoRoomState::new());
-        Box::new(VideoRoomPlugin::new(provider))
+        let provider = Box::new(MemoryVideoRoomState::new());
+        Box::new(VideoRoomPlugin::new(Arc::new(provider)))
     }
 }
 
@@ -49,53 +50,46 @@ impl VideoRoomSession {
 
 
 pub struct VideoRoomPlugin {
-    state: Box<dyn VideoRoomStateProvider>,
-    sessions: Mutex<HashMap<u64, Arc<VideoRoomSession>>>     // must use std::sync?
+    state: Arc<Box<dyn VideoRoomStateProvider>>,
+    session: RwLock<VideoRoomSession>,     // must use std::sync?
 }
 
 impl VideoRoomPlugin {
-    pub fn new(state_provider: Box<dyn VideoRoomStateProvider>) -> VideoRoomPlugin {
+    pub fn new(state_provider: Arc<Box<dyn VideoRoomStateProvider>>) -> VideoRoomPlugin {
         VideoRoomPlugin {
             state: state_provider,
-            sessions: Mutex::new(HashMap::new())
+            session: RwLock::new(VideoRoomSession::new())
         }
     }
 }
 
+#[async_trait]
 impl JanusPlugin for VideoRoomPlugin {
     fn get_name(&self) -> &'static str {
         "janus.plugin.videoroom"
     }
 
-    fn handle_message(&self, message: JanusPluginMessage) -> JanusPluginResult {
-        match self.process_message(message) {
+    async fn handle_message(&self, message: JanusPluginMessage) -> JanusPluginResult {
+        match self.process_message(message).await {
             Ok(x) => x,
             Err(e) => JanusPluginResult::ok(e.into())
         }
     }
 
-    fn handle_async_message(&self, message: JanusPluginMessage) -> Option<JanusPluginResult> {
+    async fn handle_async_message(&self, message: JanusPluginMessage) -> Option<JanusPluginResult> {
         let handle = match Weak::upgrade(&message.handle) {
             Some(x) => x,
             None => return None
         };
-        match self.process_message_async(handle, message) {
+        match self.process_message_async(message).await {
             Ok(x) => Some(x),
             Err(e) => Some(JanusPluginResult::ok(e.into()))
         }
     }
-
-    fn new_plugin_session(&self, handle_id: u64) {
-        self.sessions.lock().unwrap().insert(handle_id, Arc::new(VideoRoomSession::new()));
-    }
-
-    fn drop_plugin_session(&self, handle_id: &u64) {
-        self.sessions.lock().unwrap().remove(handle_id);
-    }
 }
 
 impl VideoRoomPlugin {
-    fn process_message(&self, message: JanusPluginMessage) -> Result<JanusPluginResult, VideoroomError> {
+    async fn process_message(&self, message: JanusPluginMessage) -> Result<JanusPluginResult, VideoroomError> {
         let request: RequestParameters = helper::parse_json(&message.body)?;
         let request_text = request.request;
         match &request_text[..] {
@@ -127,12 +121,12 @@ impl VideoRoomPlugin {
         }
     }
 
-    fn process_message_async(&self, handle: Arc<JanusHandle>, message: JanusPluginMessage) -> Result<JanusPluginResult, VideoroomError> {
+    async fn process_message_async(&self, message: JanusPluginMessage) -> Result<JanusPluginResult, VideoroomError> {
         let request: RequestParameters = helper::parse_json(&message.body)?;
         let request_text = request.request;
-        let sessions = Arc::clone(self.sessions.lock().unwrap().get(&handle.handle_id).unwrap());
+        let participant_type = self.session.read().await.participant_type;
 
-        if sessions.participant_type == JANUS_VIDEOROOM_P_TYPE_NONE {
+        if participant_type == JANUS_VIDEOROOM_P_TYPE_NONE {
             if request_text != "join" && request_text != "joinandconfigure" {
                 return Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_JOIN_FIRST, format!("Invalid request on unconfigured participant")))
             }
@@ -179,7 +173,7 @@ impl VideoRoomPlugin {
                 _ => Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_INVALID_ELEMENT, String::from("Invalid element (ptype)")))
             }
         }
-        else if sessions.participant_type == JANUS_VIDEOROOM_P_TYPE_PUBLISHER {
+        else if participant_type == JANUS_VIDEOROOM_P_TYPE_PUBLISHER {
             if request_text == "join" || request_text == "joinandconfigure" {
                 return Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_ALREADY_JOINED, String::from("Already in as a publisher on this handle")))
             }
@@ -216,7 +210,7 @@ impl VideoRoomPlugin {
                 _ => Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_INVALID_REQUEST, format!("Unknown request '{}'", request_text)))
             }
         }
-        else if sessions.participant_type == JANUS_VIDEOROOM_P_TYPE_SUBSCRIBER {
+        else if participant_type == JANUS_VIDEOROOM_P_TYPE_SUBSCRIBER {
             return match &request_text[..] {
                 "join" => Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_ALREADY_JOINED, String::from("Already in as a subscriber on this handle"))),
                 "start" => {

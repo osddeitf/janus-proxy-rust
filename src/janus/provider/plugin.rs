@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::{Mutex, Arc};
+use std::sync::Arc;
 use crate::janus::plugin::JanusPlugin;
 use crate::janus::plugin::videoroom::VideoRoomPluginFactory;
 use crate::janus::error::JanusError;
@@ -15,15 +15,13 @@ pub trait JanusPluginFactory: Send + Sync {
 pub struct JanusPluginProvider {
     /// Store mapping from 'name' to 'factory' function - create new instance out of thin air
     plugins: HashMap<String, Box<dyn JanusPluginFactory>>,
-    instance: Mutex<HashMap<String, Arc<BoxedPlugin>>>
 }
 
 impl JanusPluginProvider {
     /** For customization */
     pub fn empty() -> JanusPluginProvider {
         JanusPluginProvider {
-            plugins: HashMap::new(),
-            instance: Mutex::new(HashMap::new())
+            plugins: HashMap::new()
         }
     }
 
@@ -39,23 +37,13 @@ impl JanusPluginProvider {
     }
 
     /** Resolve plugin by name */
-    pub fn resolve(&self, name: String) -> Result<Arc<BoxedPlugin>, JanusError> {
+    pub fn resolve(&self, name: String) -> Result<BoxedPlugin, JanusError> {
         let factory = match self.plugins.get(&name) {
             Some(x) => x,
             None => return Err(JanusError::new(JANUS_ERROR_PLUGIN_NOT_FOUND, format!("No such plugin '{}'", name)))
         };
 
-        let mut map = self.instance.lock().unwrap();
-        let instance = match map.get(&name) {
-            Some(instance) => instance.clone(),
-            None => {
-                println!("LOG: Construct new instance of '{}' plugin", name);
-                let instance = Arc::new(factory.new());
-                map.insert(name, instance.clone());
-                instance
-            }
-        };
-
+        let instance = factory.new();
         Ok(instance)
     }
 }

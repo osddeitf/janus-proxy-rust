@@ -11,21 +11,21 @@ pub trait VideoRoomStateProvider: Send + Sync {
     fn get_room_parameters(&self, room: &u64) -> String;
 }
 
-pub struct LocalVideoRoomState {
+pub struct MemoryVideoRoomState {
     rooms: Mutex<HashSet<u64>>,
     params: Mutex<HashMap<u64, String>>
 }
 
-impl LocalVideoRoomState {
-    pub fn new() -> LocalVideoRoomState {
-        LocalVideoRoomState {
+impl MemoryVideoRoomState {
+    pub fn new() -> MemoryVideoRoomState {
+        MemoryVideoRoomState {
             rooms: Mutex::new(HashSet::new()),
             params: Mutex::new(HashMap::new())
         }
     }
 }
 
-impl VideoRoomStateProvider for LocalVideoRoomState {
+impl VideoRoomStateProvider for MemoryVideoRoomState {
     fn new_room_id(&self) -> u64 {
         loop {
             let id = helper::rand_id();

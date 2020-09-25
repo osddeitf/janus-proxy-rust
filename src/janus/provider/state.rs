@@ -16,28 +16,24 @@ pub trait SharedStateProvider: Send + Sync {
 
     fn remove_session(&self, id: &ID) -> bool;
     fn remove_handle(&self, id: &ID) -> bool;
-
-    // Status: preview. TODO: refine the apis
-    // fn update_backend(&self, url: String, up: bool);
-    // fn get_backend(&self) -> Option<String>;
 }
 
-pub struct HashSetStateProvider {
+pub struct MemoryStateProvider {
     sessions: Mutex<HashSet<ID>>,
     // Must be unique within a session, using global unique for simplicity
     handles: Mutex<HashSet<ID>>
 }
 
-impl HashSetStateProvider {
-    pub fn new() -> HashSetStateProvider {
-        HashSetStateProvider {
+impl MemoryStateProvider {
+    pub fn new() -> MemoryStateProvider {
+        MemoryStateProvider {
             sessions: Mutex::new(HashSet::new()),
             handles: Mutex::new(HashSet::new())
         }
     }
 }
 
-impl SharedStateProvider for HashSetStateProvider {
+impl SharedStateProvider for MemoryStateProvider {
     fn new_session(&self) -> ID {
         loop {
             let id = helper::rand_id();

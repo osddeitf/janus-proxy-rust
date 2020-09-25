@@ -26,7 +26,6 @@ use crate::janus::plugin::JanusPluginMessage;
 
 // TODO: add gracefully shutdown
 pub struct JanusProxy {
-    _janus_server: String,
     /** Local mapping from connection_id -> session_id. TODO: Is there any better way? */
     connections: RwLock<HashMap<u64, Option<u64>>>,
     /** Shared state between instances: include "session_ids" and "handle_ids" */
@@ -38,9 +37,8 @@ pub struct JanusProxy {
 }
 
 impl JanusProxy {
-    pub fn new(server: String, state_provider: Box<dyn SharedStateProvider>, plugin_provider: JanusPluginProvider) -> JanusProxy {
+    pub fn new(state_provider: Box<dyn SharedStateProvider>, plugin_provider: JanusPluginProvider) -> JanusProxy {
         JanusProxy {
-            _janus_server: server,
             state: state_provider,
             plugins: plugin_provider,
             connections: RwLock::new(HashMap::new()),
@@ -254,7 +252,7 @@ impl JanusProxy {
             transaction.clone(),
             serde_json::to_string(&body_params.body).unwrap(),
             body_params.jsep
-        ));
+        )).await;
 
         let response = match result.kind {
             // TODO: handle optional content
