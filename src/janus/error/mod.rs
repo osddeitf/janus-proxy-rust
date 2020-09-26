@@ -2,9 +2,9 @@
 pub mod code;
 
 use serde_json::error::Category;
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct JanusError {
     pub code: u32,
     pub reason: String

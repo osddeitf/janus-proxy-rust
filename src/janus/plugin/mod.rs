@@ -2,21 +2,21 @@ mod videoroom;
 mod provider;
 
 pub use self::provider::*;
-use std::sync::Weak;
+use std::sync::Arc;
 use async_trait::async_trait;
 use crate::janus::core::json::*;
 use crate::janus::core::JanusHandle;
 
 // Resemble `janus_videoroom_handle_message` function signature
 pub struct JanusPluginMessage {
-    pub handle: Weak<JanusHandle>,
+    pub handle: Arc<JanusHandle>,
     pub transaction: String,
     pub body: String,
     pub jsep: Option<JSON_OBJECT>
 }
 
 impl JanusPluginMessage {
-    pub fn new(handle: Weak<JanusHandle>, transaction: String, body: String, jsep: Option<JSON_OBJECT>) -> JanusPluginMessage {
+    pub fn new(handle: Arc<JanusHandle>, transaction: String, body: String, jsep: Option<JSON_OBJECT>) -> JanusPluginMessage {
         JanusPluginMessage { handle, transaction, body, jsep }
     }
 }

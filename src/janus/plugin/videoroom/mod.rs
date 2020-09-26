@@ -10,7 +10,7 @@ mod helper;
 mod provider;
 mod constant;
 
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 use serde_json::json;
 use async_trait::async_trait;
 use tokio::sync::RwLock;
@@ -101,9 +101,7 @@ impl VideoRoomPlugin {
             // "listforwarders" => (),
             // "enable_recording" => (),
             x if ["join", "joinandconfigure", "configure", "publish", "unpublish", "start", "pause", "switch", "leave"].contains(&x) => {
-                if let Some(handle) = Weak::upgrade(&message.handle) {
-                    handle.queue_push(message).await
-                }
+                Arc::clone(&message.handle).queue_push(message).await;
                 Ok(JanusPluginResult::wait(None))
             }
             _ => Err(

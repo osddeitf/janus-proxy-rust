@@ -4,17 +4,15 @@ mod error;
 mod helper;
 pub mod plugin;
 pub mod provider;
-mod backend;
 
 /**
 * Request types are ported from janus-gateway v0.10.5
 */
 use futures::{StreamExt, SinkExt};
 use tokio::net::TcpListener;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::{Message, Error};
 use serde_json::json;
-use std::collections::HashMap;
 use std::sync::Arc;
 use self::core::*;
 use self::request::*;
@@ -22,14 +20,14 @@ use self::response::*;
 use self::error::{JanusError, code::*};
 use self::provider::{ProxyStateProvider, JanusBackendProvider};
 use self::connection::accept_ws;
-use self::plugin::JanusPluginProvider;
+use self::plugin::{JanusPluginProvider, JanusPluginResultType::*, JanusPluginMessage};
 
 // TODO: add gracefully shutdown
 pub struct JanusProxy {
-    /** Local mapping from connection_id -> session_id. TODO: Is there any better way? */
-    connections: RwLock<HashMap<u64, Option<u64>>>,
-    /** Local sessions (managed by this instance, corresponding to a websocket connection) store */
-    sessions: RwLock<HashMap<u64, JanusSession>>,
+    // /** Local mapping from connection_id -> session_id. TODO: Is there any better way? */
+    // connections: RwLock<HashMap<u64, Option<u64>>>,
+    // /** Local sessions (managed by this instance, corresponding to a websocket connection) store */
+    // sessions: RwLock<HashMap<u64, JanusSession>>,
     /** Shared state between proxy instances: include "session_ids" and "handle_ids" */
     state: Box<dyn ProxyStateProvider>,
     /** Stored backend, like `state` above */
@@ -45,8 +43,8 @@ impl JanusProxy {
         backend_provider: Arc<Box<dyn JanusBackendProvider>>
     ) -> JanusProxy {
         JanusProxy {
-            connections: RwLock::new(HashMap::new()),
-            sessions: RwLock::new(HashMap::new()),
+            // connections: RwLock::new(HashMap::new()),
+            // sessions: RwLock::new(HashMap::new()),
             state: state_provider,
             backend: backend_provider,
             plugins: plugin_provider
@@ -61,17 +59,7 @@ impl JanusProxy {
             let (mut wtx, mut wrx) = ws.split();
             let (mut tx, mut rx) = mpsc::channel::<Message>(32);
 
-            // Assign this websocket a unique connection_id
-            let connection_id = loop {
-                let id = helper::rand_id();
-                let mut connections = janus.connections.write().await;
-                if !connections.contains_key(&id) {
-                    connections.insert(id, None);
-                    break id
-                }
-            };
-            println!("New connection {}", connection_id);
-
+            println!("New connection");
             tokio::spawn(async move {
                 while let Some(message) = rx.recv().await {
                     if let Err(e) = wtx.send(message).await {
@@ -95,12 +83,19 @@ impl JanusProxy {
                 }
             });
 
+            // Each connection correspond to a session, which may or may not have an id.
+            // Each process websocket message in synchronous fashion, response before next request.
+            // And, may emit event back to websocket connection.
             let janus = Arc::clone(&janus);
             tokio::spawn(async move {
+                // Assign session id beforehand
+                let id = janus.state.new_session();
+                let session = Arc::new(JanusSession::new(id, tx.clone()));  // for WeakRef from handle
+
                 while let Some(item) = wrx.next().await {
                     match item {
                         Ok(message) => {
-                            let res = janus.handle_websocket(connection_id, tx.clone(), message).await;
+                            let res = janus.handle_websocket(&session, message).await;
                             if tx.send(res).await.is_err() {
                                 break     // channel closed
                             }
@@ -110,25 +105,21 @@ impl JanusProxy {
                 }
 
                 // This clean up session (if present) and any resources associated (owned) with it
-                let mut connections = janus.connections.write().await;
-                if let Some(Some(session_id)) = connections.get(&connection_id) {
-                    janus.destroy_session(session_id).await;
-                    connections.remove(&connection_id);
-                }
+                janus.state.remove_session(&id);
             });
         }
     }
 
-    async fn handle_websocket(&self, connection_id: u64, tx: JanusEventEmitter, item: Message) -> Message {
+    async fn handle_websocket(&self, session: &Arc<JanusSession>, item: Message) -> Message {
         if let Message::Text(data) = item {
-            self.handle_request(connection_id, tx, data).await.into()
+            self.handle_request(session, data).await.into()
         }
         else {
             item
         }
     }
 
-    async fn handle_request(&self, connection_id: u64, tx: JanusEventEmitter, text: String) -> JanusResponse {
+    async fn handle_request(&self, session: &Arc<JanusSession>, text: String) -> JanusResponse {
         let request: IncomingRequestParameters = match json::parse(&text) {
             Ok(x) => x,
             Err(e) => return JanusResponse::bad_request(e)
@@ -150,13 +141,13 @@ impl JanusProxy {
         };
 
         let response = async {
-            if session_id == 0 && handle_id == 0 {
+            if !*session.initialized.read().await {
                 let response = match &message_text[..] {
                     "ping" => JanusResponse::new("pong", 0, transaction),
                     "info" => JanusResponse::new("server_info", 0, transaction).with_data(json!({})), // TODO: response server info
                     "create" => {
-                        let id = self.create_session(connection_id).await;
-                        let json = json!({ "id": id });
+                        *session.initialized.write().await = true;
+                        let json = json!({ "id": session.id });
                         JanusResponse::new("success", 0, transaction).with_data(json)
                     }
                     x => return Err(
@@ -166,12 +157,10 @@ impl JanusProxy {
                 return Ok(response)
             }
 
-            if session_id == 0 {
-                return Err(JanusError::new(JANUS_ERROR_SESSION_NOT_FOUND, format!("Invalid session")))
-            }
-
-            if !self.sessions.read().await.contains_key(&session_id) {
-                return Err(JanusError::new(JANUS_ERROR_SESSION_NOT_FOUND, format!("No such session \"{}\"", session_id)))
+            // TODO: Currently not support multiple session per websocket connection, reasonable?
+            if session.id != session_id {
+                // return Err(JanusError::new(JANUS_ERROR_SESSION_NOT_FOUND, format!("Invalid session")))
+                return Err(JanusError::new(JANUS_ERROR_TRANSPORT_SPECIFIC, format!("Invalid session, support only one per websocket connection")))
             }
 
             /* Both session-level and handle-level request */
@@ -190,16 +179,18 @@ impl JanusProxy {
                         let params: AttachParameters = json::parse(&text)?;
                         let id = self.state.new_handle();
                         let plugin = self.plugins.resolve(params.plugin)?;
-                        let handle = JanusHandle::new(id, session_id, tx, plugin);
 
-                        // TODO: check existence first
-                        self.sessions.write().await.get_mut(&session_id).unwrap().handles.insert(id, Arc::new(handle));
+                        let session_ref = Arc::clone(&session);
+                        let handle = JanusHandle::new(id, session_ref, plugin);
+
+                        session.handles.write().await.insert(id, handle);
 
                         let json = json!({ "id": id });
                         JanusResponse::new("success", session_id, transaction).with_data(json)
                     },
                     "destroy" => {
-                        self.destroy_session(&session_id).await;
+                        // TODO: should reset session id?
+                        *session.initialized.write().await = false;
                         // TODO: notify event handlers. Btw, what is 'event handler'
                         JanusResponse::new("success", session_id, transaction)
                     },
@@ -213,8 +204,7 @@ impl JanusProxy {
                 Ok(response)
             } else {
                 /* Handle-level request */
-                // TODO: check session existence first
-                if !self.sessions.read().await.get(&session_id).unwrap().handles.contains_key(&handle_id) {
+                if !session.handles.read().await.contains_key(&handle_id) {
                     return Err(
                         JanusError::new(JANUS_ERROR_HANDLE_NOT_FOUND, format!("No such handle \"{}\" in session \"{}\"", handle_id, session_id))
                     )
@@ -224,16 +214,37 @@ impl JanusProxy {
                     "detach" => {
                         // TODO: clean-up, check session existence first
                         self.state.remove_handle(&handle_id);
-                        self.sessions.write().await.get_mut(&session_id).unwrap().handles.remove(&handle_id);
+                        session.handles.write().await.remove(&handle_id);
                         JanusResponse::new("success", session_id, transaction)
                     },
                     "message" => {
                         // TODO: check session existence first
                         let params: BodyParameters = json::parse(&text)?;
                         let handle = Arc::clone(
-                            self.sessions.read().await.get(&session_id).unwrap().handles.get(&handle_id).unwrap()
+                            session.handles.read().await.get(&handle_id).unwrap()
                         );
-                        return JanusHandle::handle_message(handle, transaction, params.body, params.jsep).await
+
+                        // Too many copy - TODO
+                        let result = handle.plugin.handle_message(JanusPluginMessage::new(
+                            Arc::clone(&handle),
+                            transaction.clone(),
+                            json::stringify(&params.body)?,
+                            params.jsep
+                        )).await;
+
+                        let response = match result.kind {
+                            // TODO: handle optional content
+                            JANUS_PLUGIN_OK => JanusResponse::new("success", session.id, transaction)
+                                .with_plugindata(handle.id, handle.plugin.get_name(), result.content.unwrap()),
+                            // TODO: add `hint`
+                            JANUS_PLUGIN_OK_WAIT => JanusResponse::new("ack", session.id, transaction),
+                            JANUS_PLUGIN_ERROR => {
+                                let text = result.text.unwrap_or("Plugin returned a severe (unknown) error".to_string());
+                                return Err(JanusError::new(JANUS_ERROR_PLUGIN_MESSAGE, text))
+                            }
+                        };
+                        return Ok(response)
+                        // return JanusHandle::handle_message(handle, transaction, params.body, params.jsep).await
                     },
                     // TODO: do real hangup.. Should forward to plugin?
                     "hangup" => JanusResponse::new("success", session_id, transaction),
@@ -251,19 +262,5 @@ impl JanusProxy {
         };
 
         response.await.unwrap_or_else(response_error)
-    }
-
-    async fn create_session(&self, connection_id: u64) -> u64 {
-        let id = self.state.new_session();
-        let session = JanusSession::new(id);
-        self.connections.write().await.insert(connection_id, Some(id));
-        self.sessions.write().await.insert(id, session);
-        id
-    }
-
-    async fn destroy_session(&self, session_id: &u64) {
-        // TODO: Clean-up handles, as Arc wrapped
-        self.state.remove_session(session_id);
-        self.sessions.write().await.remove(session_id);
     }
 }
