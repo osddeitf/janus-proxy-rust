@@ -17,7 +17,7 @@ pub(crate) async fn accept_ws<'a>(stream: TcpStream) -> Result<WebSocketStream<T
     tokio_tungstenite::accept_hdr_async(stream, WithProtocolHeader).await
 }
 
-pub(crate) async fn _new_backend_connection(janus_server: &str) -> Result<WebSocketStream<TcpStream>, Error> {
+pub(crate) async fn new_backend_connection(janus_server: &str) -> Result<WebSocketStream<TcpStream>, Error> {
     let janus_request = Request::builder()
         .uri(janus_server)
         .method("GET")

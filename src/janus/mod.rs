@@ -2,6 +2,7 @@ mod core;
 mod connection;
 mod error;
 mod helper;
+mod gateway;
 pub mod plugin;
 pub mod provider;
 
