@@ -12,11 +12,11 @@ pub struct JanusPluginMessage {
     pub handle: Arc<JanusHandle>,
     pub transaction: String,
     pub body: String,
-    pub jsep: Option<JSON_OBJECT>
+    pub jsep: Option<JSON_ANY>
 }
 
 impl JanusPluginMessage {
-    pub fn new(handle: Arc<JanusHandle>, transaction: String, body: String, jsep: Option<JSON_OBJECT>) -> JanusPluginMessage {
+    pub fn new(handle: Arc<JanusHandle>, transaction: String, body: String, jsep: Option<JSON_ANY>) -> JanusPluginMessage {
         JanusPluginMessage { handle, transaction, body, jsep }
     }
 }
@@ -42,12 +42,12 @@ pub enum JanusPluginResultType {
 pub struct JanusPluginResult {
     pub kind: JanusPluginResultType,     // 'type' is reserved
     pub text: Option<String>,
-    pub content: Option<JSON_OBJECT>
+    pub content: Option<JSON_ANY>
 }
 
 #[allow(dead_code)]
 impl JanusPluginResult {
-    pub fn ok(data: JSON_OBJECT) -> JanusPluginResult {
+    pub fn ok(data: JSON_ANY) -> JanusPluginResult {
         JanusPluginResult {
             kind: JanusPluginResultType::JANUS_PLUGIN_OK,
             text: None, content: Some(data)

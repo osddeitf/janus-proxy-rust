@@ -7,7 +7,7 @@ use crate::janus::error::JanusError;
 #[derive(Serialize, Deserialize)]
 pub struct PluginResultWrapper {
     plugin: String,
-    data: JSON_OBJECT
+    data: JSON_ANY
 }
 
 #[skip_serializing_none]
@@ -26,17 +26,17 @@ pub struct JanusResponse {
     pub sender: JSON_POSITIVE_INTEGER,
 
     /** create, attach request */
-    pub data: Option<JSON_OBJECT>,
+    pub data: Option<JSON_ANY>,
 
     /** plugin request */
     pub plugindata: Option<PluginResultWrapper>,
 
     /** JSEP SDP */
-    pub jsep: Option<JSON_OBJECT>
+    pub jsep: Option<JSON_ANY>
 }
 
 impl JanusResponse {
-    pub fn with_data(mut self, data: JSON_OBJECT) -> JanusResponse {
+    pub fn with_data(mut self, data: JSON_ANY) -> JanusResponse {
         self.data = Some(data);
         self
     }
@@ -46,7 +46,7 @@ impl JanusResponse {
         self
     }
 
-    pub fn with_plugindata(mut self, handle_id: u64, plugin: &'static str, data: JSON_OBJECT) -> JanusResponse {
+    pub fn with_plugindata(mut self, handle_id: u64, plugin: &'static str, data: JSON_ANY) -> JanusResponse {
         self.sender = handle_id;
         self.plugindata = Some(PluginResultWrapper { plugin: plugin.to_string(), data });
         self

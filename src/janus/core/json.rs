@@ -8,7 +8,10 @@ pub type JSON_STRING = String;
 pub type JSON_STRING_ARRAY = Vec<String>;
 
 #[allow(non_camel_case_types)]
-pub type JSON_OBJECT = serde_json::Value;
+pub type JSON_ANY = serde_json::Value;
+
+#[allow(non_camel_case_types)]
+pub type JSON_OBJECT = serde_json::Map<String, serde_json::Value>;
 
 // #[allow(non_camel_case_types)]
 // pub type JSON_INTEGER = i64;

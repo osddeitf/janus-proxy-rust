@@ -1,6 +1,6 @@
 use serde_json::json;
 use serde_json::error::Category;
-use crate::janus::core::json::JSON_OBJECT;
+use crate::janus::core::json::JSON_ANY;
 
 pub static JANUS_VIDEOROOM_ERROR_UNKNOWN_ERROR     : u32 = 499;
 pub static JANUS_VIDEOROOM_ERROR_NO_MESSAGE        : u32 = 421;
@@ -26,8 +26,8 @@ pub struct VideoroomError {
     error: String
 }
 
-impl Into<JSON_OBJECT> for VideoroomError {
-    fn into(self) -> JSON_OBJECT {
+impl Into<JSON_ANY> for VideoroomError {
+    fn into(self) -> JSON_ANY {
         json!({
             "videoroom": "event",
             "error_code": self.error_code,

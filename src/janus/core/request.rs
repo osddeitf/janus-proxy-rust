@@ -26,9 +26,9 @@ pub struct AttachParameters {
 #[skip_serializing_none]
 #[derive(Deserialize)]
 pub struct BodyParameters {
-	pub body: JSON_OBJECT,
+	pub body: JSON_ANY,
 	/** Unofficial property */
-	pub jsep: Option<JSON_OBJECT>
+	pub jsep: Option<JSON_ANY>
 }
 
 #[skip_serializing_none]
@@ -119,28 +119,28 @@ pub struct AnsParameters {
 #[derive(Deserialize)]
 pub struct QueryHandlerParameters {
 	pub handler: JSON_STRING, // JANUS_JSON_PARAM_REQUIRED
-	pub request: JSON_OBJECT
+	pub request: JSON_ANY
 }
 
 #[skip_serializing_none]
 #[derive(Deserialize)]
 pub struct QueryLoggerParameters {
 	pub logger: JSON_STRING, // JANUS_JSON_PARAM_REQUIRED
-	pub request: JSON_OBJECT
+	pub request: JSON_ANY
 }
 
 #[skip_serializing_none]
 #[derive(Deserialize)]
 pub struct MessagePluginParameters {
 	pub plugin: JSON_STRING, // JANUS_JSON_PARAM_REQUIRED
-	pub request: JSON_OBJECT
+	pub request: JSON_ANY
 }
 
 #[skip_serializing_none]
 #[derive(Deserialize)]
 pub struct CustomEventParamaters {
 	pub schema: JSON_STRING, // JANUS_JSON_PARAM_REQUIRED
-	pub data: JSON_OBJECT, // JANUS_JSON_PARAM_REQUIRED
+	pub data: JSON_ANY, // JANUS_JSON_PARAM_REQUIRED
 }
 
 #[skip_serializing_none]

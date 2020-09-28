@@ -20,7 +20,7 @@ use self::request::{CreateParameters, JoinParameters, SubscriberParameters, Publ
 use self::request_mixin::*;
 use self::provider::{VideoRoomStateProvider, MemoryVideoRoomState};
 use crate::janus::plugin::{JanusPlugin, JanusPluginResult, JanusPluginMessage};
-use crate::janus::core::json::JSON_OBJECT;
+use crate::janus::core::json::JSON_ANY;
 use super::{JanusPluginFactory, BoxedPlugin};
 
 pub struct VideoRoomPluginFactory;
@@ -298,7 +298,7 @@ impl VideoRoomPlugin {
         // TODO: do real listing
         let data = json!({
             "videoroom": "success",
-            "list": Vec::<JSON_OBJECT>::new()
+            "list": Vec::<JSON_ANY>::new()
         });
         Ok(JanusPluginResult::ok(data))
     }
