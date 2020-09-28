@@ -62,7 +62,7 @@ impl JanusGateway {
                         if lock.contains_key(&response.transaction) {
                             let asynchronous = lock.get(&response.transaction).unwrap().asynchronous;
                             if asynchronous && response.janus == "ack" {
-                                return
+                                continue
                             }
 
                             // Note: unwrap is safe here
