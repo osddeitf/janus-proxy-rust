@@ -6,15 +6,16 @@ use crate::janus::error::JanusError;
 
 #[derive(Serialize, Deserialize)]
 pub struct PluginResultWrapper {
-    plugin: String,
-    data: JSON_ANY
+    pub plugin: String,
+    pub data: JSON_ANY
 }
 
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize)]
 pub struct JanusResponse {
     pub janus: String,
-    pub transaction: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub transaction: String,        // TODO: ice event like "webrtcup" not having a transaction string
     pub error: Option<JanusError>,
 
     /** session_id (websocket) */

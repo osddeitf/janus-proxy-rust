@@ -6,6 +6,7 @@ use tokio_tungstenite::tungstenite::{Message, Error};
 use std::sync::Arc;
 use std::collections::HashMap;
 use super::core::json;
+use super::core::request::IncomingRequestParameters;
 use super::core::response::JanusResponse;
 use super::connection::new_backend_connection;
 use super::error::{JanusError, code::*};
@@ -22,7 +23,7 @@ pub struct JanusGateway {
 }
 
 impl JanusGateway {
-    pub async fn connect(url: String, mut event: mpsc::Sender<JanusResponse>) -> Result<Arc<JanusGateway>, JanusError> {
+    pub async fn connect(url: String, mut event: mpsc::Sender<Message>) -> Result<Arc<JanusGateway>, JanusError> {
         // TODO: try again with different url
         let ws = match new_backend_connection(&url).await {
             Ok(x) => x,
@@ -41,12 +42,18 @@ impl JanusGateway {
             requests: RwLock::new(HashMap::new())
         };
         let instance = Arc::new(instance);
-        let gateway = Arc::clone(&instance);
+        let gateway = Arc::downgrade(&Arc::clone(&instance));
 
         tokio::spawn(async move {
             while let Some(item) = wrx.next().await {
                 match item {
                     Ok(message) => if let Message::Text(text) = &message {
+
+                        let gateway = match gateway.upgrade() {
+                            None => break,
+                            Some(x) => x
+                        };
+
                         // TODO: handle unwrap - malformed response or struct definition error
                         let response = json::parse::<JanusResponse>(text).unwrap();
 
@@ -67,7 +74,10 @@ impl JanusGateway {
                             }
                         } else {
                             drop(lock);
-                            if let Err(_) = event.send(response).await {
+
+                            // TODO: unwrap?
+                            let message = Message::Text(response.stringify().unwrap());
+                            if let Err(_) = event.send(message).await {
                                 // TODO: ignore or what?
                             }
                         }
@@ -102,7 +112,8 @@ impl JanusGateway {
                     _ = tokio::time::delay_for(Duration::from_secs(25)) => {
                         // wtx.send()
                         // TODO: send "keepalive" request, filter "ack" from response
-                    }
+                    },
+                    else => break
                 }
             }
         });
@@ -110,12 +121,15 @@ impl JanusGateway {
         Ok(instance)
     }
 
-    pub async fn send(&self, transaction: String, json: String, is_asynchronous: bool) -> Result<JanusResponse, JanusError>{
+    pub async fn send(&self, params: IncomingRequestParameters, is_asynchronous: bool) -> Result<JanusResponse, JanusError> {
         let (tx, rx) = oneshot::channel::<JanusResponse>();
         let request = JanusGatewayRequest {
             callback: tx,
             asynchronous: is_asynchronous
         };
+
+        let json = json::stringify(&params)?;
+        let transaction = params.transaction;
 
         self.requests.write().await.insert(transaction.clone(), request);    // TODO: avoid copy?
         if let Err(_) = self.queue.clone().send(Message::Text(json)).await {
@@ -124,10 +138,7 @@ impl JanusGateway {
 
         match tokio::time::timeout(Duration::from_secs(5), rx).await {
             Ok(x) => match x {
-                Ok(x) => match x.error {
-                    None => Ok(x),
-                    Some(_) => Err(JanusError::new(JANUS_ERROR_GATEWAY_INTERNAL_ERROR, String::from("Request to janus-gateway got an error")))
-                },
+                Ok(x) => Ok(x),     // NOTE: leave `response.error` for caller
                 Err(_) => {
                     self.requests.write().await.remove(&transaction);
                     Err(JanusError::new(JANUS_ERROR_GATEWAY_INTERNAL_ERROR, String::from("janus-gateway send() oneshot channel is closed")))

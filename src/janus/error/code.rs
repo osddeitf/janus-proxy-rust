@@ -80,5 +80,8 @@ pub static JANUS_ERROR_GATEWAY_TIMED_OUT: u32 = 500;
 /** Proxy error: programmer error, or unexpected (should never occurred) */
 pub static JANUS_ERROR_GATEWAY_INTERNAL_ERROR: u32 = 599;
 
-/** Proxy error: */
+/** Proxy error: connect websocket to janus-gateway failed */
 pub static JANUS_ERROR_GATEWAY_CONNECTION_FAILED: u32 = 501;
+
+/** Proxy error: No janus-gateway instance available */
+pub static JANUS_ERROR_GATEWAY_UNAVAILABLE: u32 = 502;

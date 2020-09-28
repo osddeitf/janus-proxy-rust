@@ -1,10 +1,11 @@
-use serde::Deserialize;
+use serde::{Serialize, Deserialize};
 use serde_with::skip_serializing_none;
 use super::json::*;
 
-#[derive(Deserialize)]
+#[skip_serializing_none]
+#[derive(Serialize, Deserialize)]
 pub struct IncomingRequestParameters {
-	pub transaction: JSON_STRING,	// JANUS_JSON_PARAM_REQUIRED
+	pub transaction: JSON_STRING,		// JANUS_JSON_PARAM_REQUIRED
 	pub janus: JSON_STRING,				// JANUS_JSON_PARAM_REQUIRED
 	#[serde(default, skip_serializing_if = "is_zero")]
 	pub id: JSON_POSITIVE_INTEGER,
@@ -13,7 +14,14 @@ pub struct IncomingRequestParameters {
 	#[serde(default, skip_serializing_if = "is_zero")]
 	pub session_id: JSON_POSITIVE_INTEGER,
 	#[serde(default, skip_serializing_if = "is_zero")]
-	pub handle_id: JSON_POSITIVE_INTEGER		//TODO: should be renamed to `sender`?
+	pub handle_id: JSON_POSITIVE_INTEGER,
+
+	/** Plugin message, should not be null if `janus == "message"` */
+	pub body: Option<JSON_ANY>,
+	pub jsep: Option<JSON_ANY>,
+
+	/** AttachParameters */
+	pub plugin: Option<JSON_STRING>
 }
 
 #[skip_serializing_none]

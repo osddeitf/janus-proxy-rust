@@ -91,7 +91,8 @@ impl JanusProxy {
             tokio::spawn(async move {
                 // Assign session id beforehand
                 let id = janus.state.new_session();
-                let session = Arc::new(JanusSession::new(id, tx.clone()));  // for WeakRef from handle
+                let session = JanusSession::new(Arc::clone(&janus), id, tx.clone());
+                let session = Arc::new(session);  // for WeakRef from handle
 
                 while let Some(item) = wrx.next().await {
                     match item {
@@ -131,6 +132,7 @@ impl JanusProxy {
             janus: message_text,
             session_id,
             handle_id,
+            body, jsep,
             ..
         } = request;
 
@@ -213,24 +215,22 @@ impl JanusProxy {
 
                 let response = match &message_text[..] {
                     "detach" => {
-                        // TODO: clean-up, check session existence first
+                        // TODO: clean-up?
                         self.state.remove_handle(&handle_id);
                         session.handles.write().await.remove(&handle_id);
                         JanusResponse::new("success", session_id, transaction)
                     },
                     "message" => {
-                        // TODO: check session existence first
-                        let params: BodyParameters = json::parse(&text)?;
-                        let handle = Arc::clone(
-                            session.handles.read().await.get(&handle_id).unwrap()
-                        );
+                        if body.is_none() {
+                            return Err(JanusError::new(JANUS_ERROR_MISSING_MANDATORY_ELEMENT, "missing 'body'".to_string()))
+                        }
 
-                        // Too many copy - TODO
+                        let handle = Arc::clone(session.handles.read().await.get(&handle_id).unwrap());
                         let result = handle.plugin.handle_message(JanusPluginMessage::new(
                             Arc::clone(&handle),
-                            transaction.clone(),
-                            json::stringify(&params.body)?,
-                            params.jsep
+                            transaction.clone(),        // TODO: Don't copy
+                            json::stringify(&body)?,
+                            jsep
                         )).await;
 
                         let response = match result.kind {
@@ -245,7 +245,6 @@ impl JanusProxy {
                             }
                         };
                         return Ok(response)
-                        // return JanusHandle::handle_message(handle, transaction, params.body, params.jsep).await
                     },
                     // TODO: do real hangup.. Should forward to plugin?
                     "hangup" => JanusResponse::new("success", session_id, transaction),
