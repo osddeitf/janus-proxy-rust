@@ -23,6 +23,39 @@ pub struct JanusGateway {
 }
 
 impl JanusGateway {
+    async fn on_websocket_message(&self, message: Message, event: &mut mpsc::Sender<Message>) {
+        if let Message::Text(text) = &message {
+            // TODO: handle unwrap - malformed response or struct definition error
+            let response = json::parse::<JanusResponse>(text).unwrap();
+
+            // TODO: how to handle "ack"?
+            let mut lock = self.requests.write().await;
+            if lock.contains_key(&response.transaction) {
+                let asynchronous = lock.get(&response.transaction).unwrap().asynchronous;
+                if asynchronous && response.janus == "ack" {
+                    return
+                }
+
+                // Note: unwrap is safe here
+                let requester = lock.remove(&response.transaction).unwrap();
+                drop(lock);
+
+                if let Err(_) = requester.callback.send(response) {
+                    // TODO: do what??
+                }
+            } else {
+                // TODO: should send "ack"?
+                drop(lock);
+
+                // TODO: unwrap?
+                let message = Message::Text(response.stringify().unwrap());
+                if let Err(_) = event.send(message).await {
+                    // TODO: ignore or what?
+                }
+            }
+        }
+    }
+
     pub async fn connect(url: String, mut event: mpsc::Sender<Message>) -> Result<Arc<JanusGateway>, JanusError> {
         // TODO: try again with different url
         let ws = match new_backend_connection(&url).await {
@@ -45,77 +78,65 @@ impl JanusGateway {
         let gateway = Arc::downgrade(&Arc::clone(&instance));
 
         tokio::spawn(async move {
-            while let Some(item) = wrx.next().await {
-                match item {
-                    Ok(message) => if let Message::Text(text) = &message {
-
-                        let gateway = match gateway.upgrade() {
-                            None => break,
-                            Some(x) => x
-                        };
-
-                        // TODO: handle unwrap - malformed response or struct definition error
-                        let response = json::parse::<JanusResponse>(text).unwrap();
-
-                        // TODO: how to handle "ack"?
-                        let mut lock = gateway.requests.write().await;
-                        if lock.contains_key(&response.transaction) {
-                            let asynchronous = lock.get(&response.transaction).unwrap().asynchronous;
-                            if asynchronous && response.janus == "ack" {
-                                continue
-                            }
-
-                            // Note: unwrap is safe here
-                            let requester = lock.remove(&response.transaction).unwrap();
-
-                            drop(lock);
-                            if let Err(_) = requester.callback.send(response) {
-                                // TODO: do what??
-                            }
-                        } else {
-                            drop(lock);
-
-                            // TODO: unwrap?
-                            let message = Message::Text(response.stringify().unwrap());
-                            if let Err(_) = event.send(message).await {
-                                // TODO: ignore or what?
-                            }
-                        }
-                    },
-                    // TODO: handle socket error properly
-                    Err(e) => match e {
-                        Error::ConnectionClosed => {}
-                        Error::AlreadyClosed => {}
-                        Error::Io(_) => {}
-                        // Error::Tls(_) => {}
-                        Error::Capacity(_) => {}
-                        Error::Protocol(_) => {}
-                        Error::SendQueueFull(_) => {}
-                        Error::Utf8 => {}
-                        Error::Url(_) => {}
-                        Error::Http(_) => {}
-                        Error::HttpFormat(_) => {}
-                        // _ => {}
-                    }
-                };
-            }
-        });
-
-        tokio::spawn(async move {
             loop {
+                let read_next = wrx.next();
+                let queue_next = rx.recv();
                 tokio::select! {
-                    Some(item) = rx.recv() => {
-                        if let Err(_) = wtx.send(item).await {
-                            // TODO: let ignore for now
+                    item = read_next => {
+                        match item {
+                            None => {
+                                break;
+                            },
+                            Some(item) => {
+                                let gateway = match gateway.upgrade() {
+                                    None => break,
+                                    Some(x) => x
+                                };
+
+                                match item {
+                                    Ok(message) => gateway.on_websocket_message(message, &mut event).await,
+                                    // TODO: handle socket error properly
+                                    Err(e) => match e {
+                                        Error::ConnectionClosed => {}
+                                        Error::AlreadyClosed => {}
+                                        Error::Io(_) => {}
+                                        // Error::Tls(_) => {}
+                                        Error::Capacity(_) => {}
+                                        Error::Protocol(_) => {}
+                                        Error::SendQueueFull(_) => {}
+                                        Error::Utf8 => {}
+                                        Error::Url(_) => {}
+                                        Error::Http(_) => {}
+                                        Error::HttpFormat(_) => {}
+                                        // _ => {}
+                                    }
+                                }
+
+                            }
+                        };
+                    },
+                    item = queue_next => {
+                        match item {
+                            None => {
+                                break
+                            },
+                            Some(item) => {
+                                if let Err(_) = wtx.send(item).await {
+                                    // TODO: let ignore for now
+                                    break
+                                }
+                            }
                         }
-                    },
-                    _ = tokio::time::delay_for(Duration::from_secs(25)) => {
-                        // wtx.send()
-                        // TODO: send "keepalive" request, filter "ack" from response
-                    },
-                    else => break
+                    }
                 }
             }
+
+            let gateway = match gateway.upgrade() {
+                None => return,
+                Some(x) => x
+            };
+            gateway.requests.write().await.clear();
+            // NOTE: No need to close websocket manually
         });
 
         Ok(instance)
@@ -132,8 +153,8 @@ impl JanusGateway {
         let transaction = params.transaction;
 
         self.requests.write().await.insert(transaction.clone(), request);    // TODO: avoid copy?
-        if let Err(_) = self.queue.clone().send(Message::Text(json)).await {
-            // TODO: handle send too fast? Ignore channel closed by now
+        if self.queue.clone().send(Message::Text(json)).await.is_err() {
+            return Err(JanusError::new(JANUS_ERROR_GATEWAY_CONNECTION_CLOSED, String::from("connection to janus-gateway closed")))
         }
 
         match tokio::time::timeout(Duration::from_secs(5), rx).await {

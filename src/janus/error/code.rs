@@ -85,3 +85,6 @@ pub static JANUS_ERROR_GATEWAY_CONNECTION_FAILED: u32 = 501;
 
 /** Proxy error: No janus-gateway instance available */
 pub static JANUS_ERROR_GATEWAY_UNAVAILABLE: u32 = 502;
+
+/** Proxy error: janus-gateway connection closed */
+pub static JANUS_ERROR_GATEWAY_CONNECTION_CLOSED: u32 = 503;
