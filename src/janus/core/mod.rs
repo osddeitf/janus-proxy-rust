@@ -17,6 +17,7 @@ use super::helper;
 use super::core::json::JSON_ANY;
 use super::core::request::IncomingRequestParameters;
 use super::JanusProxy;
+use tokio::time::Duration;
 
 pub struct Gateway {
     instance: Arc<JanusGateway>,
@@ -60,11 +61,36 @@ impl JanusSession {
             };
 
             // TODO: modify session_id, sender
-            let gateway = JanusGateway::connect(url, self.connection.clone()).await?;
-            let (session, handle) = Self::get_plugin_handle(&gateway, plugin).await?;
+            let backend = JanusGateway::connect(url, self.connection.clone()).await?;
+            let (session, handle) = Self::get_plugin_handle(&backend, plugin).await?;
+
+            // TODO: This may block the above? YES!!!
+            let gateway = Arc::downgrade(&Arc::clone(&backend));
+            tokio::spawn(async move {
+                loop {
+                    tokio::time::delay_for(Duration::from_secs(15)).await;
+                    let gateway = match gateway.upgrade() {
+                        None => break,
+                        Some(x) => x
+                    };
+
+                    let mut request = IncomingRequestParameters::prepare("keepalive".to_string(), None, None);
+                    request.session_id = session;
+
+                    let response = gateway.send(request, false).await;
+
+                    // Stop ping
+                    if let Err(e) = response {
+                        if e.code == JANUS_ERROR_GATEWAY_CONNECTION_CLOSED {
+                            println!("Connection to janus-gateway closed, stop ping");
+                            break
+                        }
+                    }
+                }
+            });
 
             *self.gateway.write().await = Some(Gateway {
-                instance: Arc::clone( &gateway),
+                instance: Arc::clone( &backend),
                 session, handle
             });
         }
@@ -73,7 +99,7 @@ impl JanusSession {
 
     async fn get_plugin_handle(gateway: &Arc<JanusGateway>, plugin: &str) -> Result<(u64, u64), JanusError> {
         let session = {
-            let data = Self::prepare("create".to_string(), None, None);
+            let data = IncomingRequestParameters::prepare("create".to_string(), None, None);
             let response = gateway.send(data, false).await?;
             let session = match response.data {
                 None => 0,
@@ -88,7 +114,7 @@ impl JanusSession {
         };
 
         let handle = {
-            let mut data = Self::prepare("attach".to_string(), None, None);
+            let mut data = IncomingRequestParameters::prepare("attach".to_string(), None, None);
             data.session_id = session;
             data.plugin = Some(plugin.to_string());
 
@@ -108,23 +134,11 @@ impl JanusSession {
         Ok((session, handle))
     }
 
-    fn prepare(request: String, body: Option<JSON_ANY>, jsep: Option<JSON_ANY>) -> IncomingRequestParameters {
-        IncomingRequestParameters {
-            transaction: helper::rand_id().to_string(),     // TODO: conflict resolution
-            janus: request,
-            id: 0,
-            session_id: 0,
-            handle_id: 0,
-            plugin: None,
-            body, jsep
-        }
-    }
-
     // TODO: request &'static str
     pub async fn forward(&self, request: String, body: Option<JSON_ANY>, jsep: Option<JSON_ANY>, is_async: bool) -> Result<JanusResponse, JanusError> {
         match &*self.gateway.read().await {
             Some(x) => {
-                let mut request = Self::prepare(request, body, jsep);
+                let mut request = IncomingRequestParameters::prepare(request, body, jsep);
                 request.session_id = x.session;
                 request.handle_id = x.handle;
 

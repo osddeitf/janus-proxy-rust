@@ -1,6 +1,7 @@
 use serde::{Serialize, Deserialize};
 use serde_with::skip_serializing_none;
 use super::json::*;
+use super::helper;
 
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize)]
@@ -22,6 +23,21 @@ pub struct IncomingRequestParameters {
 
 	/** AttachParameters */
 	pub plugin: Option<JSON_STRING>
+}
+
+impl IncomingRequestParameters {
+	pub fn prepare(request: String, body: Option<JSON_ANY>, jsep: Option<JSON_ANY>) -> IncomingRequestParameters {
+		IncomingRequestParameters {
+			transaction: helper::rand_id().to_string(),     // TODO: conflict resolution
+			janus: request,
+			id: 0,
+			session_id: 0,
+			handle_id: 0,
+			plugin: None,
+			body,
+			jsep
+		}
+	}
 }
 
 #[skip_serializing_none]
