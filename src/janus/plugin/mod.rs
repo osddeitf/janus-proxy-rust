@@ -42,7 +42,8 @@ pub enum JanusPluginResultType {
 pub struct JanusPluginResult {
     pub kind: JanusPluginResultType,     // 'type' is reserved
     pub text: Option<String>,
-    pub content: Option<JSON_ANY>
+    pub content: Option<JSON_ANY>,
+    pub jsep: Option<JSON_ANY>
 }
 
 #[allow(dead_code)]
@@ -50,21 +51,26 @@ impl JanusPluginResult {
     pub fn ok(data: JSON_ANY) -> JanusPluginResult {
         JanusPluginResult {
             kind: JanusPluginResultType::JANUS_PLUGIN_OK,
-            text: None, content: Some(data)
+            text: None, content: Some(data), jsep: None
         }
     }
 
     pub fn wait(text: Option<String>) -> JanusPluginResult {
         JanusPluginResult {
             kind: JanusPluginResultType::JANUS_PLUGIN_OK_WAIT,
-            text, content: None
+            text, content: None, jsep: None
         }
     }
 
     pub fn err() -> JanusPluginResult {
         JanusPluginResult {
             kind: JanusPluginResultType::JANUS_PLUGIN_ERROR,
-            text: None, content: None
+            text: None, content: None, jsep: None
         }
+    }
+
+    pub fn with_jsep(mut self, jsep: Option<JSON_ANY>) -> Self {
+        self.jsep = jsep;
+        self
     }
 }

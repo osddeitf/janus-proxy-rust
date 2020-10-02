@@ -3,6 +3,8 @@ use serde_with::skip_serializing_none;
 use tokio_tungstenite::tungstenite::Message;
 use super::json::{self, *};
 use super::apierror::JanusError;
+use crate::janus::core::JanusHandle;
+use std::sync::Arc;
 
 #[derive(Serialize, Deserialize)]
 pub struct PluginResultWrapper {
@@ -47,9 +49,13 @@ impl JanusResponse {
         self
     }
 
-    pub fn with_plugindata(mut self, handle_id: u64, plugin: &'static str, data: JSON_ANY) -> JanusResponse {
-        self.sender = handle_id;
-        self.plugindata = Some(PluginResultWrapper { plugin: plugin.to_string(), data });
+    pub fn with_plugindata(mut self, handle: &Arc<JanusHandle>, data: JSON_ANY, jsep: Option<JSON_ANY>) -> JanusResponse {
+        self.sender = handle.id;
+        self.plugindata = Some(PluginResultWrapper {
+            plugin: handle.plugin.get_name().to_string(),
+            data
+        });
+        self.jsep = jsep;
         self
     }
 

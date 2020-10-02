@@ -237,7 +237,7 @@ impl JanusProxy {
                         let response = match result.kind {
                             // TODO: handle optional content
                             JANUS_PLUGIN_OK => JanusResponse::new("success", session.id, transaction)
-                                .with_plugindata(handle.id, handle.plugin.get_name(), result.content.unwrap()),
+                                .with_plugindata(&handle, result.content.unwrap(), result.jsep),
                             // TODO: add `hint`
                             JANUS_PLUGIN_OK_WAIT => JanusResponse::new("ack", session.id, transaction),
                             JANUS_PLUGIN_ERROR => {

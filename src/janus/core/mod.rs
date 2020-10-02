@@ -182,7 +182,7 @@ impl JanusHandle {
                 };
 
                 let response = JanusResponse::new("event", session_id, transaction)
-                    .with_plugindata(handle_ref.id, handle_ref.plugin.get_name(), result.content.unwrap());
+                    .with_plugindata(&handle_ref, result.content.unwrap(), result.jsep);
 
                 // Stop process requests when session destroyed.
                 let session = match handle_ref.session.upgrade() {
