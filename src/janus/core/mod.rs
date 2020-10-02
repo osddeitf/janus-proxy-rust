@@ -1,23 +1,23 @@
 pub mod request;
 pub mod response;
 pub mod json;
+#[allow(dead_code)]
+pub mod apierror;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 use tokio::stream::StreamExt;
+use tokio::time::Duration;
 use tokio_tungstenite::tungstenite::Message;
 use super::plugin::{JanusPlugin, JanusPluginMessage};
 use super::response::JanusResponse;
 use super::gateway::JanusGateway;
-use super::error::JanusError;
-use super::error::code::*;
-use super::helper;
-use super::core::json::JSON_ANY;
-use super::core::request::IncomingRequestParameters;
 use super::JanusProxy;
-use tokio::time::Duration;
+use self::apierror::*;
+use self::json::*;
+use self::request::IncomingRequestParameters;
 
 pub struct Gateway {
     instance: Arc<JanusGateway>,

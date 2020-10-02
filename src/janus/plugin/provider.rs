@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 use super::JanusPlugin;
 use super::videoroom::VideoRoomPluginFactory;
-use crate::janus::error::JanusError;
-use crate::janus::error::code::JANUS_ERROR_PLUGIN_NOT_FOUND;
+use crate::janus::core::apierror::*;
 
 pub type BoxedPlugin = Box<dyn JanusPlugin>;
 

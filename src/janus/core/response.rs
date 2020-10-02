@@ -1,8 +1,8 @@
 use serde::{Serialize, Deserialize};
 use serde_with::skip_serializing_none;
 use tokio_tungstenite::tungstenite::Message;
-use crate::janus::json::{self, *};
-use crate::janus::error::JanusError;
+use super::json::{self, *};
+use super::apierror::JanusError;
 
 #[derive(Serialize, Deserialize)]
 pub struct PluginResultWrapper {

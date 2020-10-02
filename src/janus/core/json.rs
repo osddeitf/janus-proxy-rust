@@ -1,5 +1,5 @@
 use serde::{Serialize, Deserialize};
-use crate::janus::error::{JanusError};
+use super::apierror::JanusError;
 
 #[allow(non_camel_case_types)]
 pub type JSON_STRING = String;

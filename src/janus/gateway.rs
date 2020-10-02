@@ -9,7 +9,7 @@ use super::core::json;
 use super::core::request::IncomingRequestParameters;
 use super::core::response::JanusResponse;
 use super::connection::new_backend_connection;
-use super::error::{JanusError, code::*};
+use super::core::apierror::*;
 
 struct JanusGatewayRequest {
     callback: oneshot::Sender<JanusResponse>,

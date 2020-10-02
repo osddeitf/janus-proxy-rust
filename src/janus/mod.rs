@@ -1,6 +1,5 @@
 mod core;
 mod connection;
-mod error;
 mod helper;
 mod gateway;
 pub mod plugin;
@@ -16,9 +15,9 @@ use tokio_tungstenite::tungstenite::{Message, Error};
 use serde_json::json;
 use std::sync::Arc;
 use self::core::*;
+use self::core::apierror::*;
 use self::request::*;
 use self::response::*;
-use self::error::{JanusError, code::*};
 use self::provider::{ProxyStateProvider, JanusBackendProvider};
 use self::connection::accept_ws;
 use self::plugin::{JanusPluginProvider, JanusPluginResultType::*, JanusPluginMessage};

@@ -1,3 +1,6 @@
+use serde_json::error::Category;
+use serde::{Serialize, Deserialize};
+
 
 /** Unauthorized (can only happen when using apisecret/auth token) */
 pub static JANUS_ERROR_UNAUTHORIZED: u32 = 403;
@@ -88,3 +91,29 @@ pub static JANUS_ERROR_GATEWAY_UNAVAILABLE: u32 = 502;
 
 /** Proxy error: janus-gateway connection closed */
 pub static JANUS_ERROR_GATEWAY_CONNECTION_CLOSED: u32 = 503;
+
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct JanusError {
+    pub code: u32,
+    pub reason: String
+}
+
+impl JanusError {
+    pub fn new(code: u32, reason: String) -> JanusError {
+        JanusError { code, reason }
+    }
+
+    pub fn from_json_parse_error(e: serde_json::Error) -> Self {
+        match e.classify() {
+            Category::Syntax => JanusError::new(JANUS_ERROR_INVALID_JSON_OBJECT, "Invalid json object".to_string()),
+            Category::Io => JanusError::new(JANUS_ERROR_INVALID_JSON_OBJECT, "Invalid json object".to_string()),
+            Category::Data => JanusError::new(JANUS_ERROR_MISSING_MANDATORY_ELEMENT, format!("Validation error: {}", e)),
+            Category::Eof => JanusError::new(JANUS_ERROR_INVALID_JSON_OBJECT, "Invalid json object".to_string())
+        }
+    }
+
+    pub fn from_json_stringify_error(e: serde_json::Error) -> Self {
+        JanusError::new(JANUS_ERROR_UNKNOWN, e.to_string())
+    }
+}
