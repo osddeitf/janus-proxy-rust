@@ -21,8 +21,8 @@ pub struct IncomingRequestParameters {
 	pub body: Option<JSON_ANY>,
 	pub jsep: Option<JSON_ANY>,
 
-	/** AttachParameters */
-	pub plugin: Option<JSON_STRING>
+	#[serde(flatten)]
+	pub rest: JSON_OBJECT
 }
 
 impl IncomingRequestParameters {
@@ -33,9 +33,9 @@ impl IncomingRequestParameters {
 			id: 0,
 			session_id: 0,
 			handle_id: 0,
-			plugin: None,
 			body,
-			jsep
+			jsep,
+			rest: Default::default()
 		}
 	}
 }

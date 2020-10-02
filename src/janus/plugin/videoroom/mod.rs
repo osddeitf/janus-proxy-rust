@@ -6,7 +6,6 @@ mod request;
 
 #[allow(dead_code)]
 mod request_mixin;
-mod helper;
 mod provider;
 mod constant;
 
@@ -17,10 +16,10 @@ use tokio::sync::RwLock;
 use self::constant::*;
 use self::error::*;
 use self::request::{CreateParameters, JoinParameters, SubscriberParameters, PublishParameters, ConfigureParameters};
-use self::request_mixin::*;
+// use self::request_mixin::*;
 use self::provider::{VideoRoomStateProvider, MemoryVideoRoomState};
 use crate::janus::plugin::{JanusPlugin, JanusPluginResult, JanusPluginMessage};
-use crate::janus::core::json::JSON_ANY;
+use crate::janus::core::json::*;
 use super::{JanusPluginFactory, BoxedPlugin};
 
 pub struct VideoRoomPluginFactory;
@@ -85,10 +84,13 @@ impl JanusPlugin for VideoRoomPlugin {
 
 impl VideoRoomPlugin {
     async fn process_message(&self, message: JanusPluginMessage) -> Result<JanusPluginResult, VideoroomError> {
-        let request: RequestParameters = helper::parse_json(&message.body)?;
-        let request_text = request.request;
-        match &request_text[..] {
-            "create" => self.create_room(helper::parse_json(&message.body)?),
+        let request_text = match message.body["request"].as_str() {
+            Some(x) => x,
+            None => return Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_MISSING_ELEMENT, "'request' is required".to_string()))
+        };
+
+        match request_text {
+            "create" => self.create_room(serde_json::from_value(message.body)?),
             // "edit" => (),
             // "destroy" => (),
             "list" => self.list_room(),
@@ -111,8 +113,10 @@ impl VideoRoomPlugin {
     }
 
     async fn process_message_async(&self, message: JanusPluginMessage) -> Result<JanusPluginResult, VideoroomError> {
-        let request: RequestParameters = helper::parse_json(&message.body)?;
-        let request_text = request.request;
+        let request_text = match message.body["request"].as_str() {
+            Some(x) => x,
+            None => return Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_MISSING_ELEMENT, "'request' is required".to_string()))
+        };
         let participant_type = self.session.read().await.participant_type;
 
         if participant_type == JANUS_VIDEOROOM_P_TYPE_NONE {
@@ -120,8 +124,8 @@ impl VideoRoomPlugin {
                 return Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_JOIN_FIRST, format!("Invalid request on unconfigured participant")))
             }
 
-            let join_params: JoinParameters = helper::parse_json(&message.body)?;
-            return match &join_params.ptype[..] {
+            let params: JoinParameters = serde_json::from_value(message.body)?;
+            return match &params.ptype[..] {
                 "publisher" => {
                     // TODO: check room access
                     // TODO: set display name
@@ -143,7 +147,7 @@ impl VideoRoomPlugin {
                 },
                 // "listener" is deprecated
                 "subscriber" | "listener" => {
-                    let _params: SubscriberParameters = helper::parse_json(&message.body)?;
+                    // let _params: SubscriberParameters = serde_json::from_str(&message.body)?;
                     // TODO: verify `spatial_layer`, `substream`
                     // TODO: verify `temporal`, `temporal_layer`
 
@@ -170,7 +174,7 @@ impl VideoRoomPlugin {
                 "configure" | "publish" => {
                     // TODO: "publish" -> check already published
                     // TODO: check kicked
-                    let _params: PublishParameters = helper::parse_json(&message.body)?;
+                    // let params: PublishParameters = serde_json::from_value(message.body)?;
                     // TODO: should verify audiocodec, videocodec?
                     let data = json!({
                         "videoroom": "event",
@@ -210,7 +214,7 @@ impl VideoRoomPlugin {
                     Ok(JanusPluginResult::ok(data))
                 },
                 "configure" => {
-                    let _params: ConfigureParameters = helper::parse_json(&message.body)?;
+                    // let _params: ConfigureParameters = serde_json::from_str(&message.body)?;
                     let data = json!({
                         "videoroom": "event",
                         "room": 0,
@@ -227,7 +231,7 @@ impl VideoRoomPlugin {
                     Ok(JanusPluginResult::ok(data))
                 },
                 "switch" => {
-                    let _params: SubscriberParameters = helper::parse_json(&message.body)?;
+                    // let _params: SubscriberParameters = serde_json::from_str(&message.body)?;
                     let data = json!({
                         "videoroom": "event",
                         "room": 0,

@@ -1,5 +1,6 @@
 use serde::{Serialize, Deserialize};
 use super::apierror::JanusError;
+use serde::de::DeserializeOwned;
 
 #[allow(non_camel_case_types)]
 pub type JSON_STRING = String;
@@ -40,4 +41,11 @@ pub fn stringify<T>(value: &T) -> Result<String, JanusError>
 where T: Serialize
 {
     serde_json::to_string(value).map_err(JanusError::from_json_stringify_error)
+}
+
+pub fn from_object<T>(v: JSON_OBJECT) -> Result<T, JanusError>
+where T: DeserializeOwned
+{
+    let value = JSON_ANY::from(v);
+    serde_json::from_value(value).map_err(JanusError::from_json_parse_error)
 }

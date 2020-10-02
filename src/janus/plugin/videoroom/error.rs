@@ -1,6 +1,7 @@
-use serde_json::json;
+use serde_json::{json, Error};
 use serde_json::error::Category;
 use crate::janus::core::json::JSON_ANY;
+use crate::janus::core::apierror::JanusError;
 
 pub static JANUS_VIDEOROOM_ERROR_UNKNOWN_ERROR     : u32 = 499;
 pub static JANUS_VIDEOROOM_ERROR_NO_MESSAGE        : u32 = 421;
@@ -43,8 +44,10 @@ impl VideoroomError {
             error: reason
         }
     }
+}
 
-    pub fn from_json_parse_error(e: serde_json::Error) -> Self {
+impl From<serde_json::Error> for VideoroomError {
+    fn from(e: Error) -> Self {
         match e.classify() {
             Category::Syntax => VideoroomError::new(JANUS_VIDEOROOM_ERROR_INVALID_JSON, "Invalid json object".to_string()),
             Category::Io => VideoroomError::new(JANUS_VIDEOROOM_ERROR_INVALID_JSON, "Invalid json object".to_string()),

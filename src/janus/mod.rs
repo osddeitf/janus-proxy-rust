@@ -132,6 +132,7 @@ impl JanusProxy {
             session_id,
             handle_id,
             body, jsep,
+            rest,
             ..
         } = request;
 
@@ -178,7 +179,7 @@ impl JanusProxy {
                 let response = match &message_text[..] {
                     "attach" => {
                         // TODO: verify `token`, `opaque_id`
-                        let params: AttachParameters = json::parse(&text)?;
+                        let params: AttachParameters = json::from_object(rest)?;
                         let id = self.state.new_handle();
                         let plugin = self.plugins.resolve(params.plugin)?;
 
@@ -220,15 +221,16 @@ impl JanusProxy {
                         JanusResponse::new("success", session_id, transaction)
                     },
                     "message" => {
-                        if body.is_none() {
-                            return Err(JanusError::new(JANUS_ERROR_MISSING_MANDATORY_ELEMENT, "missing 'body'".to_string()))
-                        }
+                        let body = match body {
+                            Some(x) => x,
+                            None => return Err(JanusError::new(JANUS_ERROR_MISSING_MANDATORY_ELEMENT, "missing 'body'".to_string()))
+                        };
 
                         let handle = Arc::clone(session.handles.read().await.get(&handle_id).unwrap());
                         let result = handle.plugin.handle_message(JanusPluginMessage::new(
                             Arc::clone(&handle),
                             transaction.clone(),        // TODO: Don't copy
-                            json::stringify(&body)?,
+                            body,
                             jsep
                         )).await;
 

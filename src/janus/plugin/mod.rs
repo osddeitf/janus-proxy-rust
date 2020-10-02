@@ -11,12 +11,12 @@ use crate::janus::core::JanusHandle;
 pub struct JanusPluginMessage {
     pub handle: Arc<JanusHandle>,
     pub transaction: String,
-    pub body: String,
+    pub body: JSON_ANY,
     pub jsep: Option<JSON_ANY>
 }
 
 impl JanusPluginMessage {
-    pub fn new(handle: Arc<JanusHandle>, transaction: String, body: String, jsep: Option<JSON_ANY>) -> JanusPluginMessage {
+    pub fn new(handle: Arc<JanusHandle>, transaction: String, body: JSON_ANY, jsep: Option<JSON_ANY>) -> JanusPluginMessage {
         JanusPluginMessage { handle, transaction, body, jsep }
     }
 }

@@ -116,7 +116,8 @@ impl JanusSession {
         let handle = {
             let mut data = IncomingRequestParameters::prepare("attach".to_string(), None, None);
             data.session_id = session;
-            data.plugin = Some(plugin.to_string());
+            data.rest = JSON_OBJECT::new();
+            data.rest.insert("plugin".to_string(), plugin.to_string().into());
 
             let response = gateway.send(data, false).await?;
             let handle = match response.data {
@@ -135,13 +136,11 @@ impl JanusSession {
     }
 
     // TODO: request &'static str
-    pub async fn forward(&self, request: String, body: Option<JSON_ANY>, jsep: Option<JSON_ANY>, is_async: bool) -> Result<JanusResponse, JanusError> {
+    pub async fn forward(&self, mut request: IncomingRequestParameters, is_async: bool) -> Result<JanusResponse, JanusError> {
         match &*self.gateway.read().await {
             Some(x) => {
-                let mut request = IncomingRequestParameters::prepare(request, body, jsep);
                 request.session_id = x.session;
                 request.handle_id = x.handle;
-
                 x.instance.send(request, is_async).await
             },
             None => return Err(JanusError::new(JANUS_ERROR_GATEWAY_INTERNAL_ERROR, "janus-gateway connection hasn't been initialized".to_string()))
@@ -213,10 +212,14 @@ impl JanusHandle {
 
     pub async fn forward_message(&self, body: JSON_ANY, jsep: Option<JSON_ANY>, is_async: bool) -> Result<JSON_ANY, JanusError> {
         // TODO: session close -> return nothing?
-        let session = self.session.upgrade().unwrap();
+        let session = match self.session.upgrade() {
+            Some(x) => x,
+            None => return Err(JanusError::new(JANUS_ERROR_SESSION_NOT_FOUND, format!("Session closed")))
+        };
         session.init_gateway(self.plugin.get_name()).await?;
 
-        let response = session.forward("message".to_string(), Some(body), jsep, is_async).await?;
+        let request = IncomingRequestParameters::prepare("message".to_string(), Some(body), jsep);
+        let response = session.forward(request, is_async).await?;
         if let Some(e) = response.error {
             return Err(JanusError::new(JANUS_ERROR_GATEWAY_INTERNAL_ERROR, format!("janus-gateway error: {:?}", e)))
         }
