@@ -1,10 +1,13 @@
-use serde::Deserialize;
+use serde::{Serialize, Deserialize};
+use serde_with::skip_serializing_none;
 use super::request_mixin::*;
 use crate::janus::core::json::*;
 
 // mixins: RoomParameters (optional), AdminKeyParameters (if enabled)
-#[derive(Deserialize)]
+#[skip_serializing_none]
+#[derive(Serialize, Deserialize)]
 pub struct CreateParameters {
+	request: String,
 	pub room: Option<Identity>,
     pub description: Option<JSON_STRING>,
     pub is_private: Option<JSON_BOOL>,
@@ -138,9 +141,13 @@ pub struct RecordParameters {
 pub type EnableRecordingParameters = RecordParameters;
 
 /** Asynchronous request type definitions */
-#[derive(Deserialize)]
+#[skip_serializing_none]
+#[derive(Serialize, Deserialize)]
 pub struct JoinParameters {
-	pub feed: JSON_POSITIVE_INTEGER,
+	request: String,
+	pub room: Identity,
+	pub feed: Option<JSON_POSITIVE_INTEGER>,
+
     pub ptype: JSON_STRING, // JANUS_JSON_PARAM_REQUIRED
 	pub audio: Option<JSON_BOOL>,
 	pub video: Option<JSON_BOOL>,

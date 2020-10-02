@@ -56,3 +56,9 @@ impl From<serde_json::Error> for VideoroomError {
         }
     }
 }
+
+impl From<JanusError> for VideoroomError {
+    fn from(e: JanusError) -> Self {
+        return VideoroomError::new(e.code, e.reason)
+    }
+}

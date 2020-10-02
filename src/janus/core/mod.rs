@@ -212,8 +212,7 @@ impl JanusHandle {
         self.session.upgrade().is_none()
     }
 
-    pub async fn forward_message(&self, body: JSON_ANY, jsep: Option<JSON_ANY>, is_async: bool) -> Result<JSON_ANY, JanusError> {
-        // TODO: session close -> return nothing?
+    pub async fn forward_message(&self, body: JSON_ANY, jsep: Option<JSON_ANY>, is_async: bool) -> Result<(JSON_ANY, Option<JSON_ANY>), JanusError> {
         let session = match self.session.upgrade() {
             Some(x) => x,
             None => return Err(JanusError::new(JANUS_ERROR_SESSION_NOT_FOUND, format!("Session closed")))
@@ -233,7 +232,7 @@ impl JanusHandle {
                     Err(JanusError::new(JANUS_ERROR_GATEWAY_INTERNAL_ERROR, "Mismatch plugindata returned from janus-gateway".to_string()))
                 }
                 else {
-                    Ok(x.data)
+                    Ok((x.data, response.jsep))
                 }
             }
         }

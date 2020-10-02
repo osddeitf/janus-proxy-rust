@@ -130,20 +130,26 @@ impl VideoRoomPlugin {
                     // TODO: check room access
                     // TODO: set display name
                     // TODO: set user id (or random?)
+                    let handle = message.handle;
+
+                    // Create room
+                    let room = self.state.get_room_parameters(&params.room);
+                    match handle.forward_message(serde_json::from_str(&room)?, None, false).await {
+                        Ok(x) => x,
+                        Err(e) => return Err(VideoroomError::new(e.code, e.reason))   // TODO
+                    };
+
+                    // Actually join
+                    let (response, _) = match handle.forward_message(serde_json::to_value(params)?, None, true).await {
+                        Ok(x) => x,
+                        Err(e) => return Err(VideoroomError::new(e.code, e.reason))   // TODO
+                    };
 
                     self.session.write().await.participant_type = JANUS_VIDEOROOM_P_TYPE_PUBLISHER;
 
+                    // TODO: handle "joinandconfigure"
                     // TODO: return list of available publishers
-                    let data = json!({
-                        "videoroom": "joined",
-                        "room": 0, //
-                        "description": "",
-                        "id": 0,    // feed
-                        "private_id": 0,
-                        "publishers": []
-                        // ...omitted... TODO
-                    });
-                    Ok(JanusPluginResult::ok(data))
+                    Ok(JanusPluginResult::ok(response))
                 },
                 // "listener" is deprecated
                 "subscriber" | "listener" => {
@@ -176,12 +182,9 @@ impl VideoRoomPlugin {
                     // TODO: check kicked
                     // let params: PublishParameters = serde_json::from_value(message.body)?;
                     // TODO: should verify audiocodec, videocodec?
-                    let data = json!({
-                        "videoroom": "event",
-                        "room": 0,
-                        "configured": "ok"
-                    });
-                    Ok(JanusPluginResult::ok(data))
+
+                    let (response, jsep) = message.handle.forward_message(message.body, message.jsep, true).await?;
+                    Ok(JanusPluginResult::ok(response).with_jsep(jsep))
                 },
                 "unpublish" => {
                     let data = json!({
