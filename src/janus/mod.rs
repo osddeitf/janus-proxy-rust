@@ -250,7 +250,34 @@ impl JanusProxy {
                     // TODO: do real hangup.. Should forward to plugin?
                     "hangup" => JanusResponse::new("success", session_id, transaction),
                     // TODO: forward to plugin?
-                    // "trickle" => (),
+                    "trickle" => {
+                        let params: TrickleParameters = json::from_object(rest)?;
+                        if params.candidate.is_some() && params.candidates.is_some() {
+                            return Err(JanusError::new(JANUS_ERROR_MISSING_MANDATORY_ELEMENT, "Missing mandatory element (candidate|candidates)".to_string()))
+                        }
+
+                        if let Some(candidate) = params.candidate {
+                            candidate.validate()?;
+                            let handle = Arc::clone(session.handles.read().await.get(&handle_id).unwrap());
+                            handle.trickle(candidate).await?;
+                        }
+                        else if let Some(candidates) = params.candidates {
+                            let err = candidates.iter().find_map(|x| x.validate().err());
+                            if let Some(e) = err {
+                                return Err(e)
+                            }
+
+                            let handle = Arc::clone(session.handles.read().await.get(&handle_id).unwrap());
+                            for x in candidates.into_iter() {
+                                handle.trickle(x).await?
+                            }
+                        }
+                        else {
+                            return Err(JanusError::new(JANUS_ERROR_INVALID_JSON, "Can't have both candidate and candidates".to_string()))
+                        }
+
+                        JanusResponse::new("ack", session.id, transaction)
+                    },
                     "attach" | "destroy" => return Err(
                         JanusError::new(JANUS_ERROR_INVALID_REQUEST_PATH, format!("Unhandled request '{}' at this path", message_text))
                     ),

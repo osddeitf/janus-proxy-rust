@@ -6,14 +6,14 @@ use super::apierror::JanusError;
 use crate::janus::core::JanusHandle;
 use std::sync::Arc;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct PluginResultWrapper {
     pub plugin: String,
     pub data: JSON_ANY
 }
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct JanusResponse {
     pub janus: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]

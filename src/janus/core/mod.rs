@@ -1,6 +1,7 @@
 pub mod request;
 pub mod response;
 pub mod json;
+pub mod ice;
 #[allow(dead_code)]
 pub mod apierror;
 
@@ -18,6 +19,7 @@ use super::JanusProxy;
 use self::apierror::*;
 use self::json::*;
 use self::request::IncomingRequestParameters;
+use crate::janus::core::ice::JanusIceTrickle;
 
 pub struct Gateway {
     instance: Arc<JanusGateway>,
@@ -235,5 +237,25 @@ impl JanusHandle {
                 }
             }
         }
+    }
+
+    pub async fn trickle(&self, item: JanusIceTrickle) -> Result<(), JanusError> {
+        let session = match self.session.upgrade() {
+            Some(x) => x,
+            None => return Err(JanusError::new(JANUS_ERROR_SESSION_NOT_FOUND, format!("Session closed")))
+        };
+
+        // TODO: store trickle if janus-gateway not connected yet?
+        let mut request = IncomingRequestParameters::prepare("trickle".to_string(), None, None);
+        request.rest.insert("candidate".to_string(), match serde_json::to_value(item) {
+            Ok(x) => x,
+            Err(_) => return Err(
+                JanusError::new(JANUS_ERROR_GATEWAY_INTERNAL_ERROR, format!("Cannot serialize janus-ice-trickle",))
+            )
+        });
+
+        session.forward(request, false).await?;
+
+        Ok(())
     }
 }

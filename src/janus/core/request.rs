@@ -2,6 +2,7 @@ use serde::{Serialize, Deserialize};
 use serde_with::skip_serializing_none;
 use super::json::*;
 use crate::janus::helper;
+use crate::janus::core::ice::JanusIceTrickle;
 
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize)]
@@ -38,6 +39,13 @@ impl IncomingRequestParameters {
 			rest: Default::default()
 		}
 	}
+}
+
+/** janus=trickle, unofficial */
+#[derive(Deserialize)]
+pub struct TrickleParameters {
+	pub candidate: Option<JanusIceTrickle>,
+	pub candidates: Option<Vec<JanusIceTrickle>>
 }
 
 #[skip_serializing_none]
