@@ -54,16 +54,37 @@ impl JanusSession {
         }
     }
 
-    pub async fn init_gateway(&self, plugin: &str) -> Result<(), JanusError> {
-        // Should be run only once
+    pub async fn init_gateway(&self, plugin: &str, handle_id: u64) -> Result<(), JanusError> {
+        // TODO: support multiple janus-gateway instances, one per handle
         if self.gateway.read().await.is_none() {
             let url = match self.app.backend.get_backend() {
                 None => return Err(JanusError::new(JANUS_ERROR_GATEWAY_UNAVAILABLE, String::from("No janus-gateway instance available"))),
                 Some(x) => x
             };
 
+            // TODO: is unbounded safe?
+            let (tx, mut rx) = mpsc::unbounded_channel::<JanusResponse>();
+            let mut wtx = self.connection.clone();
+
+            let session_id = self.id;
+            tokio::spawn(async move {
+                while let Some(mut x) = rx.recv().await {
+                    if x.session_id != 0 {
+                        x.session_id = session_id;
+                    }
+                    if x.sender != 0 {
+                        x.sender = handle_id;
+                    }
+
+                    let text = Message::Text(x.stringify().unwrap());
+                    if wtx.send(text).await.is_err() {
+                        break;
+                    }
+                }
+            });
+
             // TODO: modify session_id, sender
-            let backend = JanusGateway::connect(url, self.connection.clone()).await?;
+            let backend = JanusGateway::connect(url, tx).await?;
             let (session, handle) = Self::get_plugin_handle(&backend, plugin).await?;
 
             // TODO: This may block the above? YES!!!
@@ -217,7 +238,7 @@ impl JanusHandle {
             Some(x) => x,
             None => return Err(JanusError::new(JANUS_ERROR_SESSION_NOT_FOUND, format!("Session closed")))
         };
-        session.init_gateway(self.plugin.get_name()).await?;
+        session.init_gateway(self.plugin.get_name(), self.id).await?;
 
         let request = IncomingRequestParameters::prepare("message".to_string(), Some(body), jsep);
         let response = session.forward(request, is_async).await?;

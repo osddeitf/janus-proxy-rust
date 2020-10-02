@@ -23,12 +23,11 @@ pub struct JanusGateway {
 }
 
 impl JanusGateway {
-    async fn on_websocket_message(&self, message: Message, event: &mut mpsc::Sender<Message>) {
+    async fn on_websocket_message(&self, message: Message, event: &mut mpsc::UnboundedSender<JanusResponse>) {
         if let Message::Text(text) = &message {
             // TODO: handle unwrap - malformed response or struct definition error
             let response = json::parse::<JanusResponse>(text).unwrap();
 
-            // TODO: how to handle "ack"?
             let mut lock = self.requests.write().await;
             if lock.contains_key(&response.transaction) {
                 let asynchronous = lock.get(&response.transaction).unwrap().asynchronous;
@@ -47,18 +46,14 @@ impl JanusGateway {
                 // TODO: should send "ack"?
                 drop(lock);
 
-                // TODO: unwrap?
-                let message = Message::Text(response.stringify().unwrap());
-
-                // TODO: map session_id, handle_id
-                if let Err(_) = event.send(message).await {
+                if let Err(_) = event.send(response) {
                     // TODO: ignore or what?
                 }
             }
         }
     }
 
-    pub async fn connect(url: String, mut event: mpsc::Sender<Message>) -> Result<Arc<JanusGateway>, JanusError> {
+    pub async fn connect(url: String, mut event: mpsc::UnboundedSender<JanusResponse>) -> Result<Arc<JanusGateway>, JanusError> {
         // TODO: try again with different url
         let ws = match new_backend_connection(&url).await {
             Ok(x) => x,
