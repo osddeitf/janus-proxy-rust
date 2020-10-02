@@ -29,7 +29,7 @@ pub struct JanusProxy {
     // /** Local sessions (managed by this instance, corresponding to a websocket connection) store */
     // sessions: RwLock<HashMap<u64, JanusSession>>,
     /** Shared state between proxy instances: include "session_ids" and "handle_ids" */
-    state: Box<dyn ProxyStateProvider>,
+    state: Arc<Box<dyn ProxyStateProvider>>,
     /** Stored backend, like `state` above */
     backend: Arc<Box<dyn JanusBackendProvider>>,
     /** Plugin resolver */
@@ -38,8 +38,8 @@ pub struct JanusProxy {
 
 impl JanusProxy {
     pub fn new(
-        state_provider: Box<dyn ProxyStateProvider>,
         plugin_provider: JanusPluginProvider,
+        state_provider: Arc<Box<dyn ProxyStateProvider>>,
         backend_provider: Arc<Box<dyn JanusBackendProvider>>
     ) -> JanusProxy {
         JanusProxy {
@@ -230,8 +230,7 @@ impl JanusProxy {
                         let result = handle.plugin.handle_message(JanusPluginMessage::new(
                             Arc::clone(&handle),
                             transaction.clone(),        // TODO: Don't copy
-                            body,
-                            jsep
+                            body, jsep
                         )).await;
 
                         let response = match result.kind {
@@ -249,7 +248,6 @@ impl JanusProxy {
                     },
                     // TODO: do real hangup.. Should forward to plugin?
                     "hangup" => JanusResponse::new("success", session_id, transaction),
-                    // TODO: forward to plugin?
                     "trickle" => {
                         let params: TrickleParameters = json::from_object(rest)?;
                         if params.candidate.is_some() && params.candidates.is_some() {

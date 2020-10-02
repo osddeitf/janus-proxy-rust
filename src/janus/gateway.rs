@@ -49,6 +49,8 @@ impl JanusGateway {
 
                 // TODO: unwrap?
                 let message = Message::Text(response.stringify().unwrap());
+
+                // TODO: map session_id, handle_id
                 if let Err(_) = event.send(message).await {
                     // TODO: ignore or what?
                 }

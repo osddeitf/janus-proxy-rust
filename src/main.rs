@@ -15,8 +15,8 @@ async fn main() {
     backend.update_backend(server, true);
 
     let janus = JanusProxy::new(
-        Box::new(MemoryStateProvider::new()),
         JanusPluginProvider::default(),
+        Arc::new(Box::new(MemoryStateProvider::new())),
         Arc::new(Box::new(backend))
     );
 
