@@ -105,7 +105,9 @@ pub struct StopRtpForwardParameters {
 
 // Mixins: RoomParameters,
 #[derive(Deserialize)]
-pub struct ExistsParameters {}
+pub struct ExistsParameters {
+	pub room: u64
+}
 
 // mixins: RoomParameters
 #[derive(Deserialize)]

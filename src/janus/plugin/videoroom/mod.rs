@@ -18,7 +18,7 @@ use async_trait::async_trait;
 use tokio::sync::RwLock;
 use self::constant::*;
 use self::error::*;
-use self::request::{CreateParameters, JoinParameters};
+use self::request::{CreateParameters, JoinParameters, ExistsParameters};
 use self::response::VideoroomResponse;
 use self::provider::{VideoRoomStateProvider, MemoryVideoRoomState};
 use super::{JanusPluginFactory, BoxedPlugin};
@@ -106,10 +106,29 @@ impl VideoRoomPlugin {
             "create" => self.create_room(serde_json::from_value(message.body)?),
             // "edit" => (),
             // "destroy" => (),
-            "list" => self.list_room(),
+            "list" => {
+                let rooms = self.state.list_rooms().into_iter()
+                    .map(|x| json!({ "room": x }))
+                    .collect::<Vec<JSON_ANY>>();
+
+                let data = json!({
+                    "videoroom": "success",
+                    "list": rooms
+                });
+                Ok(JanusPluginResult::ok(data))
+            },
             // "rtp_forward" => (),
             // "stop_rtp_forward" => (),
-            // "exists" => (),
+            "exists" => {
+                let params: ExistsParameters = serde_json::from_value(message.body)?;
+                let exists = self.state.has_room(&params.room);
+                let data = json!({
+                    "videoroom": "success",
+                    "room": params.room,
+                    "exists": exists
+                });
+                Ok(JanusPluginResult::ok(data))
+            },
             // "allowed" => (),
             // "kick" => (),
             // "listparticipants" => (),
@@ -297,14 +316,5 @@ impl VideoRoomPlugin {
         self.state.save_room_parameters(params);
 
         Ok(result)
-    }
-
-    fn list_room(&self) -> Result<JanusPluginResult, VideoroomError> {
-        // TODO: do real listing
-        let data = json!({
-            "videoroom": "success",
-            "list": Vec::<JSON_ANY>::new()
-        });
-        Ok(JanusPluginResult::ok(data))
     }
 }

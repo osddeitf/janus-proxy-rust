@@ -7,6 +7,7 @@ pub trait VideoRoomStateProvider: Send + Sync {
     fn new_room_id(&self) -> u64;
     fn has_room(&self, id: &u64) -> bool;
 
+    fn list_rooms(&self) -> Vec<u64>;
     fn save_room_parameters(&self, room: CreateParameters);
     fn get_room_parameters(&self, room: &u64) -> String;
 }
@@ -38,6 +39,10 @@ impl VideoRoomStateProvider for MemoryVideoRoomState {
 
     fn has_room(&self, id: &u64) -> bool {
         self.rooms.lock().unwrap().contains(id)
+    }
+
+    fn list_rooms(&self) -> Vec<u64> {
+        self.rooms.lock().unwrap().iter().map(|x| *x).collect()
     }
 
     fn save_room_parameters(&self, room: CreateParameters) {
