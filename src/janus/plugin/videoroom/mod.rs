@@ -11,16 +11,16 @@ mod constant;
 mod response;
 
 use std::sync::Arc;
+use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::json;
 use async_trait::async_trait;
 use tokio::sync::RwLock;
 use self::constant::*;
 use self::error::*;
-use self::request::{CreateParameters, JoinParameters, SubscriberParameters, PublishParameters, ConfigureParameters};
-// use self::request_mixin::*;
-use self::provider::{VideoRoomStateProvider, MemoryVideoRoomState};
+use self::request::{CreateParameters, JoinParameters};
 use self::response::VideoroomResponse;
+use self::provider::{VideoRoomStateProvider, MemoryVideoRoomState};
 use super::{JanusPluginFactory, BoxedPlugin};
 use crate::janus::plugin::{JanusPlugin, JanusPluginResult, JanusPluginMessage};
 use crate::janus::core::json::*;
@@ -125,9 +125,15 @@ impl VideoRoomPlugin {
         }
     }
 
-    async fn forward_message<T: DeserializeOwned>(handle: &Arc<JanusHandle>, body: JSON_ANY, jsep: Option<JSON_ANY>, is_async: bool) -> Result<(String, T, Option<JSON_ANY>), VideoroomError>{
+    async fn gateway_forward(handle: &Arc<JanusHandle>, body: JSON_ANY, jsep: Option<JSON_ANY>, is_async: bool) -> Result<JanusPluginResult, VideoroomError> {
+        let (res, jsep) = handle.forward_message(body, jsep, is_async).await?;
+        Ok(JanusPluginResult::ok(res).with_jsep(jsep))
+    }
+
+    async fn gateway_request<T: DeserializeOwned + Serialize>(handle: &Arc<JanusHandle>, body: JSON_ANY, jsep: Option<JSON_ANY>, is_async: bool) -> Result<(VideoroomResponse<T>, Option<JSON_ANY>), VideoroomError>{
         let (response, jsep) = handle.forward_message(body, jsep, is_async).await?;
 
+        // Parse with JSON_ANY to check "error" first (T may have required field)
         let response: VideoroomResponse = match serde_json::from_value(response) {
             Ok(x) => x,
             Err(e) => return Err(
@@ -139,20 +145,20 @@ impl VideoRoomPlugin {
             return Err(e)
         }
 
-        let data = match response.data {
-            None => return Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_INTERNAL, format!("Empty response data from janus-gateway"))),
-            Some(x) => {
-                let data: T = match serde_json::from_value(x.into()) {
-                    Ok(x) => x,
-                    Err(e) => return Err(
-                        VideoroomError::new(JANUS_VIDEOROOM_ERROR_INTERNAL, format!("Error parsing janus-gateway response data: {}", e))
-                    )
-                };
-                data
-            }
+        let data: T = match serde_json::from_value(response.data.into()) {
+            Ok(x) => x,
+            Err(e) => return Err(
+                VideoroomError::new(JANUS_VIDEOROOM_ERROR_INTERNAL, format!("Error parsing janus-gateway response data: {}", e))
+            )
         };
 
-        Ok((response.videoroom, data, jsep))
+        let response = VideoroomResponse {
+            videoroom: response.videoroom,
+            error: None,
+            data
+        };
+
+        Ok((response, jsep))
     }
 
     async fn process_message_async(&self, message: JanusPluginMessage) -> Result<JanusPluginResult, VideoroomError> {
@@ -175,121 +181,75 @@ impl VideoRoomPlugin {
                     // TODO: set user id (or random?)
                     let handle = message.handle;
 
-                    // Create room
+                    // Create room. TODO: check created.
                     let room_params = self.state.get_room_parameters(&params.room);
-                    Self::forward_message::<JSON_ANY>(&handle, serde_json::from_str(&room_params)?, None, false).await?;
+                    Self::gateway_request::<JSON_ANY>(&handle, serde_json::from_str(&room_params)?, None, false).await?;
 
                     // Actually join
                     let params = serde_json::to_value(params)?;
-                    let (text, response, _) = Self::forward_message::<JSON_ANY>(&handle, params, None, true).await?;
+                    let (response, jsep) = Self::gateway_request::<JSON_ANY>(&handle, params, None, true).await?;
 
                     self.session.write().await.participant_type = JANUS_VIDEOROOM_P_TYPE_PUBLISHER;
-                    let response = VideoroomResponse::new(text, None, Some(response));
 
                     // TODO: return list of available publishers
-                    Ok(JanusPluginResult::ok(serde_json::to_value(response)?))
+                    Ok(JanusPluginResult::ok(serde_json::to_value(response)?).with_jsep(jsep))
                 },
                 // "listener" is deprecated
                 "subscriber" | "listener" => {
-                    // let _params: SubscriberParameters = serde_json::from_str(&message.body)?;
-                    // TODO: verify `spatial_layer`, `substream`
-                    // TODO: verify `temporal`, `temporal_layer`
+                    let params = serde_json::to_value(params)?;
+                    let (response, jsep) = Self::gateway_request::<JSON_ANY>(&message.handle, params, None, true).await?;
 
-                    // TODO: verify `feed` (publisher) existence
-                    // TODO: mutex...
-                    // sessions.participant_type = JANUS_VIDEOROOM_P_TYPE_SUBSCRIBER
-                    let data = json!({
-                        "videoroom": "attached",
-                        "room": 0, //
-                        "id": 0, // feed
-                        // ...omitted... TODO
-                    });
-                    Ok(JanusPluginResult::ok(data))
+                    self.session.write().await.participant_type = JANUS_VIDEOROOM_P_TYPE_SUBSCRIBER;
+
+                    Ok(JanusPluginResult::ok(serde_json::to_value(response)?).with_jsep(jsep))
                 },
-                _ => Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_INVALID_ELEMENT, String::from("Invalid element (ptype)")))
+                _ => {
+                    Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_INVALID_ELEMENT, String::from("Invalid element (ptype)")))
+                }
             }
         }
         else if participant_type == JANUS_VIDEOROOM_P_TYPE_PUBLISHER {
-            if request_text == "join" || request_text == "joinandconfigure" {
-                return Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_ALREADY_JOINED, String::from("Already in as a publisher on this handle")))
-            }
-
             return match &request_text[..] {
+                "join" | "joinandconfigure" => {
+                    Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_ALREADY_JOINED, String::from("Already in as a publisher on this handle")))
+                }
                 "configure" | "publish" => {
-                    // TODO: "publish" -> check already published
-                    // TODO: check kicked
-                    // let params: PublishParameters = serde_json::from_value(message.body)?;
-                    // TODO: should verify audiocodec, videocodec?
-
-                    let (response, jsep) = message.handle.forward_message(message.body, message.jsep, true).await?;
-                    Ok(JanusPluginResult::ok(response).with_jsep(jsep))
+                    Self::gateway_forward(&message.handle, message.body, message.jsep, true).await
                 },
                 "unpublish" => {
-                    let data = json!({
-                        "videoroom": "event",
-                        "room": 0,
-                        "unpublished": "ok"
-                    });
-                    Ok(JanusPluginResult::ok(data))
+                    Self::gateway_forward(&message.handle, message.body, message.jsep, true).await
                 },
                 "leave" => {
-                    let data = json!({
-                        "videoroom": "event",
-                        "room": 0,
-                        "leaving": "ok"
-                    });
-                    Ok(JanusPluginResult::ok(data))
+                    Self::gateway_forward(&message.handle, message.body, message.jsep, true).await
                 },
-                _ => Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_INVALID_REQUEST, format!("Unknown request '{}'", request_text)))
+                _ => {
+                    Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_INVALID_REQUEST, format!("Unknown request '{}'", request_text)))
+                }
             }
         }
         else if participant_type == JANUS_VIDEOROOM_P_TYPE_SUBSCRIBER {
             return match &request_text[..] {
-                "join" => Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_ALREADY_JOINED, String::from("Already in as a subscriber on this handle"))),
+                "join" => {
+                    Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_ALREADY_JOINED, String::from("Already in as a subscriber on this handle")))
+                },
                 "start" => {
-                    let data = json!({
-                        "videoroom": "event",
-                        "room": 0,
-                        "started": "ok"
-                    });
-                    Ok(JanusPluginResult::ok(data))
+                    Self::gateway_forward(&message.handle, message.body, message.jsep, true).await
                 },
                 "configure" => {
-                    // let _params: ConfigureParameters = serde_json::from_str(&message.body)?;
-                    let data = json!({
-                        "videoroom": "event",
-                        "room": 0,
-                        "configured": "ok"
-                    });
-                    Ok(JanusPluginResult::ok(data))
+                    Self::gateway_forward(&message.handle, message.body, message.jsep, true).await
                 },
                 "pause" => {
-                    let data = json!({
-                        "videoroom": "event",
-                        "room": 0,
-                        "paused": "ok"
-                    });
-                    Ok(JanusPluginResult::ok(data))
+                    Self::gateway_forward(&message.handle, message.body, message.jsep, true).await
                 },
                 "switch" => {
-                    // let _params: SubscriberParameters = serde_json::from_str(&message.body)?;
-                    let data = json!({
-                        "videoroom": "event",
-                        "room": 0,
-                        "id": 0,
-                        "switched": "ok"
-                    });
-                    Ok(JanusPluginResult::ok(data))
+                    Self::gateway_forward(&message.handle, message.body, message.jsep, true).await
                 },
                 "leave" => {
-                    let data = json!({
-                        "videoroom": "event",
-                        "room": 0,
-                        "left": "ok"
-                    });
-                    Ok(JanusPluginResult::ok(data))
+                    Self::gateway_forward(&message.handle, message.body, message.jsep, true).await
                 },
-                _ => Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_INVALID_REQUEST, format!("Unknown request '{}'", request_text)))
+                _ => {
+                    Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_INVALID_REQUEST, format!("Unknown request '{}'", request_text)))
+                }
             }
         }
         Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_UNKNOWN_ERROR, String::from("Unexpected server error, plugin state malformed")))
