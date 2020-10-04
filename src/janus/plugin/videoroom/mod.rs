@@ -22,12 +22,21 @@ use crate::janus::plugin::{JanusPlugin, JanusPluginResult, JanusPluginMessage};
 use crate::janus::core::json::*;
 use super::{JanusPluginFactory, BoxedPlugin};
 
-pub struct VideoRoomPluginFactory;
+pub struct VideoRoomPluginFactory {
+    provider: Arc<Box<dyn VideoRoomStateProvider>>
+}
+
+impl VideoRoomPluginFactory {
+    pub fn new() -> VideoRoomPluginFactory {
+        VideoRoomPluginFactory {
+            provider: Arc::new(Box::new(MemoryVideoRoomState::new()))
+        }
+    }
+}
 
 impl JanusPluginFactory for VideoRoomPluginFactory {
     fn new(&self) -> BoxedPlugin {
-        let provider = Box::new(MemoryVideoRoomState::new());
-        Box::new(VideoRoomPlugin::new(Arc::new(provider)))
+        Box::new(VideoRoomPlugin::new(Arc::clone(&self.provider)))
     }
 }
 

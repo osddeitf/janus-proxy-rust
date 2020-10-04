@@ -26,7 +26,7 @@ impl JanusPluginProvider {
     /** Default configured */
     pub fn default() -> JanusPluginProvider {
         let provider = Self::empty();
-        provider.add(String::from("janus.plugin.videoroom"), Box::new(VideoRoomPluginFactory))
+        provider.add(String::from("janus.plugin.videoroom"), Box::new(VideoRoomPluginFactory::new()))
     }
 
     pub fn add(mut self, name: String, factory: Box<dyn JanusPluginFactory>) -> JanusPluginProvider {
