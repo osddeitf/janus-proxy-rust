@@ -148,16 +148,52 @@ pub type EnableRecordingParameters = RecordParameters;
 pub struct JoinParameters {
 	request: String,
 	pub room: Identity,
-	pub feed: Option<JSON_POSITIVE_INTEGER>,
+	pub ptype: JSON_STRING, // JANUS_JSON_PARAM_REQUIRED
 
-    pub ptype: JSON_STRING, // JANUS_JSON_PARAM_REQUIRED
+	#[serde(flatten)]
+	pub _rest: JSON_OBJECT
+}
+
+#[skip_serializing_none]
+#[derive(Serialize, Deserialize)]
+pub struct PublisherParameters {
+	pub token: Option<JSON_STRING>,
+	pub id: Option<JSON_POSITIVE_INTEGER>,
+    pub display: Option<JSON_STRING>,
+
+	/** joinandconfigure */
 	pub audio: Option<JSON_BOOL>,
 	pub video: Option<JSON_BOOL>,
 	pub data: Option<JSON_BOOL>,
 	pub bitrate: Option<JSON_POSITIVE_INTEGER>,
 	pub record: Option<JSON_BOOL>,
 	pub filename: Option<JSON_STRING>,
-	pub token: Option<JSON_STRING>
+
+	/** is configure? */
+	pub audio_active_packets: Option<JSON_POSITIVE_INTEGER>,
+	pub audio_level_average: Option<JSON_POSITIVE_INTEGER>
+}
+
+#[skip_serializing_none]
+#[derive(Serialize, Deserialize)]
+pub struct SubscriberParameters {
+	pub feed: JSON_POSITIVE_INTEGER,
+
+	pub private_id: Option<JSON_POSITIVE_INTEGER>,
+	pub close_pc: Option<JSON_BOOL>,
+	pub audio: Option<JSON_BOOL>,
+	pub video: Option<JSON_BOOL>,
+	pub data: Option<JSON_BOOL>,
+	pub offer_audio: Option<JSON_BOOL>,
+	pub offer_video: Option<JSON_BOOL>,
+	pub offer_data: Option<JSON_BOOL>,
+	/* For VP8 (or H.264) simulcast */
+	pub substream: Option<JSON_POSITIVE_INTEGER>,
+	pub temporal: Option<JSON_POSITIVE_INTEGER>,
+	pub fallback: Option<JSON_POSITIVE_INTEGER>,
+	/* For VP9 SVC */
+	pub spatial_layer: Option<JSON_POSITIVE_INTEGER>,
+	pub temporal_layer: Option<JSON_POSITIVE_INTEGER>,
 }
 
 #[derive(Deserialize)]
@@ -181,11 +217,6 @@ pub struct PublishParameters {
 }
 
 #[derive(Deserialize)]
-pub struct PublisherParameters {
-    pub display: Option<JSON_STRING>
-}
-
-#[derive(Deserialize)]
 pub struct ConfigureParameters {
     pub audio: Option<JSON_BOOL>,
 	pub video: Option<JSON_BOOL>,
@@ -202,23 +233,4 @@ pub struct ConfigureParameters {
 	pub temporal_layer: Option<JSON_POSITIVE_INTEGER>,
 	/* The following is to handle a renegotiation */
 	pub update: Option<JSON_BOOL>
-}
-
-#[derive(Deserialize)]
-pub struct SubscriberParameters {
-	pub private_id: Option<JSON_POSITIVE_INTEGER>,
-	pub close_pc: Option<JSON_BOOL>,
-	pub audio: Option<JSON_BOOL>,
-	pub video: Option<JSON_BOOL>,
-	pub data: Option<JSON_BOOL>,
-	pub offer_audio: Option<JSON_BOOL>,
-	pub offer_video: Option<JSON_BOOL>,
-	pub offer_data: Option<JSON_BOOL>,
-	/* For VP8 (or H.264) simulcast */
-	pub substream: Option<JSON_POSITIVE_INTEGER>,
-	pub temporal: Option<JSON_POSITIVE_INTEGER>,
-	pub fallback: Option<JSON_POSITIVE_INTEGER>,
-	/* For VP9 SVC */
-	pub spatial_layer: Option<JSON_POSITIVE_INTEGER>,
-	pub temporal_layer: Option<JSON_POSITIVE_INTEGER>,
 }
