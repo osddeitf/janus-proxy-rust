@@ -8,8 +8,10 @@ mod request;
 mod request_mixin;
 mod provider;
 mod constant;
+mod response;
 
 use std::sync::Arc;
+use serde::de::DeserializeOwned;
 use serde_json::json;
 use async_trait::async_trait;
 use tokio::sync::RwLock;
@@ -18,9 +20,11 @@ use self::error::*;
 use self::request::{CreateParameters, JoinParameters, SubscriberParameters, PublishParameters, ConfigureParameters};
 // use self::request_mixin::*;
 use self::provider::{VideoRoomStateProvider, MemoryVideoRoomState};
+use self::response::VideoroomResponse;
+use super::{JanusPluginFactory, BoxedPlugin};
 use crate::janus::plugin::{JanusPlugin, JanusPluginResult, JanusPluginMessage};
 use crate::janus::core::json::*;
-use super::{JanusPluginFactory, BoxedPlugin};
+use crate::janus::core::JanusHandle;
 
 pub struct VideoRoomPluginFactory {
     provider: Arc<Box<dyn VideoRoomStateProvider>>
@@ -121,6 +125,36 @@ impl VideoRoomPlugin {
         }
     }
 
+    async fn forward_message<T: DeserializeOwned>(handle: &Arc<JanusHandle>, body: JSON_ANY, jsep: Option<JSON_ANY>, is_async: bool) -> Result<(String, T, Option<JSON_ANY>), VideoroomError>{
+        let (response, jsep) = handle.forward_message(body, jsep, is_async).await?;
+
+        let response: VideoroomResponse = match serde_json::from_value(response) {
+            Ok(x) => x,
+            Err(e) => return Err(
+                VideoroomError::new(JANUS_VIDEOROOM_ERROR_INTERNAL, format!("Error parsing janus-gateway response: {}", e))
+            )
+        };
+
+        if let Some(e) = response.error {
+            return Err(e)
+        }
+
+        let data = match response.data {
+            None => return Err(VideoroomError::new(JANUS_VIDEOROOM_ERROR_INTERNAL, format!("Empty response data from janus-gateway"))),
+            Some(x) => {
+                let data: T = match serde_json::from_value(x.into()) {
+                    Ok(x) => x,
+                    Err(e) => return Err(
+                        VideoroomError::new(JANUS_VIDEOROOM_ERROR_INTERNAL, format!("Error parsing janus-gateway response data: {}", e))
+                    )
+                };
+                data
+            }
+        };
+
+        Ok((response.videoroom, data, jsep))
+    }
+
     async fn process_message_async(&self, message: JanusPluginMessage) -> Result<JanusPluginResult, VideoroomError> {
         let request_text = match message.body["request"].as_str() {
             Some(x) => x,
@@ -142,23 +176,18 @@ impl VideoRoomPlugin {
                     let handle = message.handle;
 
                     // Create room
-                    let room = self.state.get_room_parameters(&params.room);
-                    match handle.forward_message(serde_json::from_str(&room)?, None, false).await {
-                        Ok(x) => x,
-                        Err(e) => return Err(VideoroomError::new(e.code, e.reason))   // TODO
-                    };
+                    let room_params = self.state.get_room_parameters(&params.room);
+                    Self::forward_message::<JSON_ANY>(&handle, serde_json::from_str(&room_params)?, None, false).await?;
 
                     // Actually join
-                    let (response, _) = match handle.forward_message(serde_json::to_value(params)?, None, true).await {
-                        Ok(x) => x,
-                        Err(e) => return Err(VideoroomError::new(e.code, e.reason))   // TODO
-                    };
+                    let params = serde_json::to_value(params)?;
+                    let (text, response, _) = Self::forward_message::<JSON_ANY>(&handle, params, None, true).await?;
 
                     self.session.write().await.participant_type = JANUS_VIDEOROOM_P_TYPE_PUBLISHER;
+                    let response = VideoroomResponse::new(text, None, Some(response));
 
-                    // TODO: handle "joinandconfigure"
                     // TODO: return list of available publishers
-                    Ok(JanusPluginResult::ok(response))
+                    Ok(JanusPluginResult::ok(serde_json::to_value(response)?))
                 },
                 // "listener" is deprecated
                 "subscriber" | "listener" => {

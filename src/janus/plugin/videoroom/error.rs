@@ -1,3 +1,4 @@
+use serde::{Serialize, Deserialize};
 use serde_json::{json, Error};
 use serde_json::error::Category;
 use crate::janus::core::json::JSON_ANY;
@@ -22,27 +23,29 @@ pub static JANUS_VIDEOROOM_ERROR_NOT_PUBLISHED     : u32 = 435;
 pub static JANUS_VIDEOROOM_ERROR_ID_EXISTS         : u32 = 436;
 pub static JANUS_VIDEOROOM_ERROR_INVALID_SDP       : u32 = 437;
 
+pub static JANUS_VIDEOROOM_ERROR_INTERNAL          : u32 = 600;
+
+#[derive(Serialize, Deserialize)]
 pub struct VideoroomError {
-    error_code: u32,
-    error: String
+    #[serde(rename = "error_code")]
+    code: u32,
+    #[serde(rename = "error")]
+    reason: String
 }
 
 impl Into<JSON_ANY> for VideoroomError {
     fn into(self) -> JSON_ANY {
         json!({
             "videoroom": "event",
-            "error_code": self.error_code,
-            "error": self.error
+            "error_code": self.code,
+            "error": self.reason
         })
     }
 }
 
 impl VideoroomError {
     pub fn new(code: u32, reason: String) -> VideoroomError {
-        VideoroomError {
-            error_code: code,
-            error: reason
-        }
+        VideoroomError { code, reason }
     }
 }
 
