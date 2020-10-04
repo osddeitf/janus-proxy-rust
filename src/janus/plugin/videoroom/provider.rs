@@ -30,7 +30,7 @@ impl VideoRoomStateProvider for MemoryVideoRoomState {
         loop {
             let id = helper::rand_id();
             let mut rooms = self.rooms.lock().unwrap();
-            if !rooms.insert(id) {
+            if rooms.insert(id) {
                 return id
             }
         }
