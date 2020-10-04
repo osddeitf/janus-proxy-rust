@@ -192,23 +192,28 @@ impl JanusHandle {
         });
 
         // Process async message one-by-one, mimic janus-gateway implementation
-        let handle_ref = Arc::clone(&handle);
+        let handle_ref = Arc::downgrade(&handle);
         tokio::spawn(async move {
             while let Some(message) = rx.next().await {
+                let handle = match handle_ref.upgrade() {
+                    None => break,
+                    Some(x) => x
+                };
+
                 // TODO: don't copy
                 let transaction = message.transaction.clone();
 
                 // TODO: Optimization - Stop process requests if no result???
-                let result = match handle_ref.plugin.handle_async_message(message).await {
+                let result = match handle.plugin.handle_async_message(message).await {
                     Some(x) => x,
                     None => break
                 };
 
                 let response = JanusResponse::new("event", session_id, transaction)
-                    .with_plugindata(&handle_ref, result.content.unwrap(), result.jsep);
+                    .with_plugindata(&handle, result.content.unwrap(), result.jsep);
 
                 // Stop process requests when session destroyed.
-                let session = match handle_ref.session.upgrade() {
+                let session = match handle.session.upgrade() {
                     None => break,
                     Some(x) => x
                 };
